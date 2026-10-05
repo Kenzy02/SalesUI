@@ -53,6 +53,7 @@ export default function UnitsPage() {
   const page = Number(params.get('page') ?? '1') || 1;
 
   const update = (changes: Partial<Record<FilterKey | 'ctx' | 'dealId' | 'leadId', string>>, resetPage = true) => {
+    if (!('projectId' in changes)) setAnnouncement('');
     const next = new URLSearchParams(params);
     for (const [k, v] of Object.entries(changes)) {
       if (v === '' && k !== 'status') next.delete(k);
@@ -182,10 +183,9 @@ export default function UnitsPage() {
                   </ChoiceChip>
                 ))}
               </div>
-              <p className="sr-only" aria-live="polite">
+              <p aria-live="polite" className="mt-1 min-h-4 text-xs font-medium text-amber-800">
                 {announcement}
               </p>
-              {announcement && <p className="mt-1 text-xs font-medium text-amber-800">{announcement}</p>}
             </fieldset>
 
             <div className="flex flex-col gap-3 border-t border-border pt-4 md:flex-row md:items-end">

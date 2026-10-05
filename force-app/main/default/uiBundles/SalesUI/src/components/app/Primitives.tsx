@@ -150,6 +150,14 @@ export function ErrorState({
   compact?: boolean;
 }) {
   const permission = status === 403;
+  if (status === 404) {
+    return (
+      <div role="status" className="flex flex-col items-center rounded-xl border border-border bg-card px-4 py-8 text-center">
+        <p className="font-medium text-brand-navy">Not available to you</p>
+        <p className="mt-1 max-w-md text-sm text-muted-foreground">{message}</p>
+      </div>
+    );
+  }
   return (
     <div
       role="alert"

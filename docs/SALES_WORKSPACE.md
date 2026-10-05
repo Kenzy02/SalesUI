@@ -1,78 +1,124 @@
 # Amwaj Sales Workspace (SalesUI)
 
-React 19 / Vite UI Bundle (`force-app/main/default/uiBundles/SalesUI`) backed by an Apex REST API
-(`/services/apexrest/amwaj/sales/v1`, class `AmwajSalesApi`). Verified against the **AmwajReact** org:
-`00DRR00000WVnGo2AL`, *Amwaj Iraq*, **sandbox** (`IsSandbox = true`), Enterprise Edition, single currency **USD**,
-time zone Asia/Baghdad.
+React 19 / Vite UI Bundle (`force-app/main/default/uiBundles/SalesUI`) backed by the Apex REST API
+`/services/apexrest/amwaj/sales/v1` (class `AmwajSalesApi`). Org: **AmwajReact**, `00DRR00000WVnGo2AL`, *Amwaj Iraq*,
+**sandbox**, single currency **USD**, time zone Asia/Baghdad. Nothing has been deployed to production.
 
-## Architecture
+**App link (sandbox):** https://amwaj--reactapp--c.sandbox.my.salesforce.app/app/c__SalesUI
 
-| Layer | What | Why |
-| --- | --- | --- |
-| React | Calls the API with `@salesforce/platform-sdk` `fetch` (session auth + CSRF token for `apexrest`). | Supported, authenticated path; no tokens in client code. |
-| `AmwajSalesReadService` | Reads. SELECT lists contain only fields the user can read; every query is `WITH USER_MODE`. | Sharing, object access and FLS apply. "My" = `UserInfo.getUserId()`, never a client id. |
-| `AmwajOfferService` | EOI and reservation creation, signed-EOI upload. | Mirrors the org's screen flows `New_EOI_From_Opportunity` / `New_Reservation_From_Opportunity`. |
-| `AmwajLeadService` | Lead status/rating/notes, calls and follow-ups (Tasks). | User-mode DML, so the org's validation rules apply unchanged. |
-| `AmwajCommissionService` | Commission calculated on request from finance-confirmed records. | Nothing stored, nothing client-supplied. Rate in `Amwaj_Commission_Policy__mdt.Default` (1%). |
-| `PaymentPlanViewerController` (existing) | Price and payment-plan eligibility. | Reused as the single pricing authority (same logic as `amwajPaymentPlanViewer`). |
+## 1. Sales-user error: "You do not have access to the Apex class named: AmwajSalesApi"
 
-Classes are API 67.0, where Apex database operations default to **user mode**. System mode is used only where the
-org's flows run in system mode (`SystemModeWithoutSharing`), and only after a user-context access check.
+- **Affected user / session:** Sarah Khazaal (`Amwaj User` profile, role `Sales_Exec_Iraq_Gate`, Salesforce licence), opened by the
+  admin with *Log in as* on 5 Oct 2026 10:03 UTC (Setup Audit Trail). Assignments: `Amwaj_SalesExec_PS`, `SalesUI_Access`,
+  profile permission set. No permission-set groups, muting or licence restrictions involved. `ApiEnabled` comes from the profile
+  and `SalesUI_Access`.
+- **Root cause (application defect):** in the org, only the System Administrator profile had class access to `AmwajSalesApi`.
+  The class-access entry for `SalesUI_Access` was missing from the source that was actually deployed (the edit was lost
+  before commit), so the deployment reported the permission set as *Unchanged*. The Apex tests didn't catch it, because REST
+  methods called directly in tests skip the class-access check.
+- **Fix:** `SalesUI_Access` grants `AmwajSalesApi` (only that class), deploy `0AfRR00000gcoOb0AI`, verified through
+  `SetupEntityAccess`. A test now asserts the grant (`AmwajSalesApiTest.salesUiAccessGrantsTheApiClass`).
+- **Verified:** the deployed app loads for Sarah (screenshot `after-overview-sales-user.jpg`).
 
-## Verified org-to-UI mapping
+## 2. Permission matrix (effective access for a sales executive)
 
-| Feature | Objects / fields | Existing org logic | UI |
+Effective = union of the `Amwaj User` profile, `Amwaj_SalesExec_PS` and `SalesUI_Access`, traced with ObjectPermissions /
+FieldPermissions. Reads in the app are `WITH USER_MODE` with field lists filtered to readable fields.
+
+| Feature | Needed | Existing access | Change made |
 | --- | --- | --- | --- |
-| My leads | `Lead` (OWD Private), `Status` New/Working/Qualified/Unqualified, `Project_Interest__c`, `DesiredUnitArea__c` | Round-robin assignment flow; role-based validation rules on owner/status changes | My leads list + detail; status/rating/notes edit (FLS-gated) |
-| Customers | `Opportunity` (Private) on Person Accounts; stages Working → EOI → Contracting → Closed | Stage moved by EOI/Reservation flows | Customers list + detail; "Start EOI" |
-| Units | `Inventory__c` (status Available/Held/Reserved/Sold…), `Project__c`, `Building__c`, `Zone__c` | Inventory flow syncs `PriceListItem__c` price | Card/list views, filters (project, status, type, bedrooms, zone, price, search) |
-| Pricing & plans | `PriceList__c`, `PriceListItem__c.List_Price_2__c`, `PaymentPlan__c` (zone lists), `PaymentPlanInstallment__c` (fractional %) | `PaymentPlanViewerController` | Unit detail price + plan schedules |
-| Offer = **EOI** | `EOI__c` (Submitted/Paid/Expired/Refunded), `Reservation_Fees__c` = 1.5% of list price | Create → unit `Held`, expiry = today + `PackageSettings__c.EOI_Period_Days__c` (**3**); discount → approval (≤5% Discount_Approvers, >5% Sales Director) | "Start an EOI and hold a unit" |
-| Signature | `EOI_Document_Attached__c`, files | Required to leave Submitted; no e-signature in use (PhiDoc installed, 0 templates/requests) | Signed EOI section: files on the EOI, upload if permitted |
-| Payment | `PaymentVerifiedByFinance__c` | Before-save flow sets Paid | Progress step "Booking fee confirmed by finance" |
-| 14-day hold | `Reservation__c.HoldExpiry__c` = today + `DefaultHoldDays__c` (**14**) | Needs Paid EOI; deposit verified → PendingWithContracts/Reserved; contract doc → Active/Sold/Closed Won | "Reserve unit (14-day hold)" on paid EOIs |
-| Commission | none existed (`Opportunity.SalesCommissionAmount__c` is unused and rep-editable) | — | My commission (calculated) |
-| Media | none in org (0 Files on Project/Building/Inventory; CMS holds only bundle sources) | — | Honest "No photos in Salesforce yet"; Files on unit/building/project are shown privately when added (title containing "floor plan" = floor plan) |
+| Open the app / API | App visibility, `ApiEnabled`, class `AmwajSalesApi` | App + API via `SalesUI_Access`; class **missing** | Class access added to `SalesUI_Access` |
+| Assigned leads, status/notes | Lead R/E, Status/Description edit; sharing (Lead OWD Private) | Lead CRE; Description E; **Rating not readable** | None (Rating hidden for reps) |
+| Customer deals | Opportunity R/E, Account R/E (Opportunity OWD Private) | CRE on both | None |
+| Projects, units, prices, plans | Read on Project, Building, Inventory, PriceList(Item), PaymentPlan(Installment) | Read via `Amwaj_SalesExec_PS` | None |
+| Create EOI / reservation | Create on EOI / Reservation; edit on the deal | EOI CR, Reservation CR, Opportunity E | None. Writes mirror the org's system-mode flows after a user-mode access check |
+| Calls and follow-ups (Task) | Edit Tasks + read/edit on `Task.WhoId`, `WhatId`, `ActivityDate`, `Description` | Edit Tasks only; **no Task field access** | Read/edit on those 4 fields in `SalesUI_Access`. Salesforce applies the shared fields to Event too (`Event.WhoId/WhatId/Description`) |
+| Signed EOI upload | Edit on `EOI__c` + `EOI_Document_Attached__c` | `EOI__c` **no Edit**; field E (PS) | **None (decision needed)**: object Edit would also let reps change `Discount__c`, `Approval_Status__c`, `Payment_Method__c` and `Preferred_Payment_Plan__c` (editable via the profile), bypassing discount approval |
+| Finance confirmation | `EOI__c.PaymentVerifiedByFinance__c`, `Reservation__c.DepositVerified__c` | EOI field: read-only for reps. Deposit field: E via `Amwaj_SalesExec_PS`, but **dormant** (no Reservation Edit) | None. App never exposes these actions |
+| Commission view | Read own deals; server reads finance fields | Via the API (system-mode read of amounts on the user's own deals only) | None |
 
-## Business-rule conflicts and decisions
+Grants to review (not changed):
+- `Opportunity.SalesCommissionAmount__c` is **effectively editable** by reps (and by Team Leader, Sales Director, Deputy Director
+  and System Admin Persona). No flow, Apex or app logic uses it. Removing it from `Amwaj_SalesExec_PS` affects no process I could
+  find, but it is a shared org permission set, so this needs your approval.
+- `Reservation__c.DepositVerified__c` edit in `Amwaj_SalesExec_PS` is dormant today. It would become effective if reps ever got
+  Reservation Edit. Deposit verification otherwise sits with Administration (9 users) and Follow-Up (7). Recommend removing it from
+  the Sales Executive PS.
 
-Resolved during this work (with approval):
-1. **Price lists had blank Effective From**, so the existing viewer returned no price for any unit. Fixed
-   `PaymentPlanViewerController` to treat blank as "effective now" (consistent with its plan logic).
+## 3. Business logic (follows the org; read from configuration)
 
-Open decisions for Amwaj:
-1. **Hold length.** Requested: the offer holds the unit for 14 days. Org: the EOI holds for **3 days**; the 14-day hold is on
-   the **reservation**, which requires a paid EOI. The app follows the org. Change `EOI_Period_Days__c` if 14 days is wanted at EOI.
-2. **Hold expiry is not automatic.** The scheduled flow only flags `Due__c` and sends a 2-day warning. Units stay Held
-   (22 such EOIs exist in the sandbox). Reservations have no expiry automation at all, and `HoldExpiryFuture` references a
-   non-existent "Held" status. Smallest change: have the scheduled flow set `Status__c = Expired` (the existing after-save
-   flow then releases the unit), plus an equivalent for reservations. Decide who may extend holds (reps can edit `ExpiryDate__c` today).
-3. **What counts as "signed".** The app uses `EOI_Document_Attached__c` (signed document on file). Confirm, or adopt PhiDoc e-signature.
-4. **Who files the signed EOI.** The Sales Executive PS has **no Edit on `EOI__c`** (but edit on `EOI_Document_Attached__c`), so
-   reps cannot file it; the app hides the upload for them. Also, `EOI_Attachment_Screen` links the file to a
-   `CustomerDocument__c` that a scheduled path deletes 2 minutes later, leaving the EOI without a linked file.
-5. **Tax** is not recorded anywhere; commission includes property payments and booking fees only and shows tax as "Not recorded".
-6. **Commission policy details (assumptions to confirm):** cash basis (confirmed receipts minus *processed* refunds, so an
-   expired/cancelled deal keeps commission until a refund is processed); attribution to the **deal owner** at calculation time;
-   no splits; single currency. **Commission paid** is not tracked in Salesforce.
-7. **Follow-up activities.** Reps' profile + PS give no read access to `Task.WhoId/WhatId/ActivityDate`, so calls/follow-ups are
-   disabled for reps (works for users with access). Smallest change: grant those Task fields (read/edit) to sales executives.
-8. **Access gaps to review:** Sales Exec PS grants edit on `Reservation__c.DepositVerified__c` (a finance action) and on
-   `Opportunity.SalesCommissionAmount__c`.
-9. **Data gaps:** Iraq Gate has no active payment plans (its units can't be offered); no lead has ever been converted (Company =
-   "Individual" on all leads); all deals are owned by the admin user, so reps currently see no customers or commission.
+| Rule | Source |
+| --- | --- |
+| EOI hold length | `PackageSettings__c.EOI_Period_Days__c` (**3**) via the EOI before-save flow; shown from settings |
+| Reservation hold length | `PackageSettings__c.DefaultHoldDays__c` (**14**) via the Reservation before-save flow |
+| Booking (reservation) fee | 1.5% of list price, hard-coded **in the org's EOI and reservation screen flows**; the API mirrors it |
+| Price and plan eligibility | `PaymentPlanViewerController` (existing; blank price-list start date treated as effective, approved earlier) |
+| Discounts | Whole number 0–20% (EOI flow screen rule); approval routing by the org's approval flows |
+| Signature evidence | `EOI_Document_Attached__c` (signed document on file); no e-signature in use |
+| Finance confirmation, stages, unit status | Existing record-triggered flows |
+| Currency / dates | `UserInfo` currency (USD); dates from Salesforce; timestamps shown in the user's Salesforce time zone |
 
-## Validation
+The 14-day *offer* hold in the earlier demo was a demo assumption, not a requirement, and is not implemented.
+
+**Commission: a requested enhancement, not existing org logic.** The rate lives in `Amwaj_Commission_Policy__mdt.Default`
+(1%), created during this project. The UI labels it "Proposed … pending confirmation". **Unconfirmed assumptions:** attribution
+to the current deal owner; cash basis (processed refunds deduct, so an expired or cancelled EOI keeps commission until a refund
+is processed); no splits; payout handled elsewhere. Tax is **not recorded** in the org and is shown as unavailable, not zero.
+Commission paid is **not tracked**.
+
+## 4. Filters
+
+| Screen | Filter | Field mapping | Notes |
+| --- | --- | --- | --- |
+| Units | Project (step 1) | `Inventory__c.Project__c` | Chips with available counts (`Project__c.AvailableUnits__c`) |
+| Units | Unit type (step 2) | `Inventory__c.Unit_Type__c` | Independent picklist, no record types. Options per project come from the inventory (aggregate), with available counts. An incompatible type is cleared on project change, with a message |
+| Units | Availability, bedrooms (min), zone, min/max price, search | `Status__c`, `Bedrooms__c`, `Zone__c` (per project), `Unit_Price__c`, `Name`/`UnitCode__c`/`Building__r.Name` | All server-side; count and pagination cover every match; chips + Clear filters |
+| Units | Customer context | `?dealId=` / `?leadId=` | Starts from the deal's `Project__c` or the lead's `Project_Interest__c`, and the unit type of `Interested_Unit__c` (the only unit-type preference the org records). Applied once; later browsing never changes the customer record. Carried to unit detail and into the EOI form; filters kept on "Back to units" |
+| My leads | Project of interest | `Lead.Project_Interest__c` or `nd_Project_of_Interest__c` | No unit-type preference field exists on leads (data gap, not invented) |
+| Customers | Project | `Opportunity.Project__c` | — |
+
+Projects without an active payment plan (Iraq Gate) show a notice on Units, and unit detail explains why an EOI can't start. No
+plan is created and eligibility is not bypassed.
+
+## 5. Validation
 
 | Check | Result |
 | --- | --- |
-| Apex (`AmwajOfferServiceTest`, `AmwajCommissionServiceTest`, `AmwajSalesApiTest`, `PaymentPlanViewerControllerTest`) | **38/38 pass** in the sandbox (across the two deployments), run as real-permission sales users (`Amwaj User` + `Amwaj_SalesExec_PS` + `SalesUI_Access`) |
-| Covered by tests | own-leads scoping and peer isolation (404); EOI create → unit Held, 3-day expiry, 1.5% fee, KYC written; second rep on the same unit → 409, nothing written; retry → same EOI; invalid ID/mobile/discount/plan/sold unit/pre-launch project rejected with no writes; reservation requires Paid, 14-day hold, down payment via org subflow; reps refused signed-EOI upload (403); commission 1% of confirmed amounts, zero when signed without collections, pre-signing collections count once signed, later confirmations counted once, refunds deducted, owner-only |
-| React | `tsc` + `vite build` pass; ESLint 0 errors (5 advisory warnings); Vitest 4/4 |
-| Live browser (sandbox, as the admin user) | Overview, units, unit detail, EOI creation (EOI-00000099, unit held until 8 Oct, fee $3,888), validation messages, reservation (RES-00000028, hold to 19 Oct, deposit $64,800), commission $38.88 → $686.88 after deposit confirmation. Test records were then closed: unit A9 back to Available, deal Closed Lost. |
-| Not exercised | Running the UI as an actual sales rep in a browser (no rep login used); true parallel requests (serialised by `FOR UPDATE`, covered logically by tests); refunds/Processed refund requests live; media display (no files exist); phone-width layout in a browser; Playwright e2e (browsers not installed). |
+| Apex tests (`AmwajOfferServiceTest`, `AmwajCommissionServiceTest`, `AmwajSalesApiTest`, `PaymentPlanViewerControllerTest`) | **39/39 pass** in the sandbox (deploy `0AfRR00000gceCP0AY`), run as users with exactly the reps' profile + permission sets |
+| Frontend | `tsc` + `vite build` pass; ESLint 0 errors (6 advisory warnings); Vitest **7/7** (formatting; project → unit-type logic) |
+| **Deployed app as Sarah Khazaal** (Log in as, sandbox) | Overview, My leads (own test lead only), Customers, deal detail, follow-up created as her (Task owned by Sarah, due 7 Oct), Units with customer context (project and type preselected), project change clearing type, Villa + 4 bedrooms = 92 matches over 4 server pages, unit detail with customer CTA, **EOI-00000100 created by her** (A10 held until 8 Oct = 3-day setting, fee $3,519), EOI page with upload/reserve correctly unavailable, another user's EOI and lead → "not shared", commission page |
+| Phone layout | Checked at 390 px in a frame on the **local** build (CLI admin data); found and fixed horizontal overflow on New EOI. The deployed app at phone width as a sales user was **not** captured (Chrome window couldn't be resized) |
+| Not verified | Playwright e2e (browsers not installed); refunds live; media display (no files in org); signed-EOI upload by an authorised operations user via the browser |
 
-## Deploy
+Test data (sandbox, labelled "SalesUI TEST"): lead `00QRR00000RdTtp2AF` and deal `006RR00000YOkMJYA1` owned by Sarah; EOI-00000100
+was set to Expired after the check (A10 back to Available). Her follow-up task is still open. Earlier: EOI-00000099 / RES-00000028
+(closed). Rep emails in this sandbox end in `.invalid`; no customer notifications are sent by these flows.
+
+### Screenshots (`docs/screenshots/`)
+- Before: `before-units-admin-session.jpg` (previous round, admin-only via local proxy; your screenshot showed the access error).
+- After (deployed app, Sarah Khazaal): `after-overview-sales-user.jpg`, `after-leads-project-filter-sales-user.jpg`,
+  `after-units-customer-context-sales-user.jpg`, `after-project-change-clears-type-sales-user.jpg`,
+  `after-unit-detail-sales-user.jpg`, `after-eoi-restricted-actions-sales-user.jpg`.
+- Phone: `after-phone-390px-local-build.jpg` (local build, admin data).
+
+## 6. Defects
+
+**Existing org defects (not changed; proposed fixes):**
+1. **Holds don't expire.** `EOI_Release_the_Held_Unit_Scheduled` only sets `Due__c` and sends a warning, so units stay Held (22 in the
+   sandbox past expiry). Reservations have no expiry automation, and `HoldExpiryFuture` checks a "Held" status that doesn't exist.
+   *Fix:* have the scheduled flow set `Status__c = Expired` (the existing after-save flow then releases the unit); add an equivalent
+   for reservations; fix or remove the dead rule. Decide whether reps may extend holds (they can edit `ExpiryDate__c` today).
+2. **Signed-document link lost.** `EOI_Attachment_Screen` links the file to a `CustomerDocument__c` that a scheduled path deletes 2
+   minutes later, so the EOI keeps the checkbox but no file. *Fix:* also link the file to the EOI (ContentDocumentLink) before the
+   cleanup, or stop deleting.
+3. **Who files the signed EOI:** reps have no EOI Edit (see matrix). Decide the responsible role.
+4. Data: Iraq Gate has no active payment plan; no lead has been converted; most deals are owned by the admin.
+
+**Application defects found and fixed this round:** missing class grant (§1); Task fields missing for follow-ups; phone overflow on
+New EOI; one failing overview panel could blank the page (panels now load independently); "not shared" records offered a useless
+retry; duplicate screen-reader announcement.
+
+## 7. Deploy
 
 ```bash
 cd force-app/main/default/uiBundles/SalesUI && npm install && npm run build && cd -
@@ -80,19 +126,23 @@ sf project deploy start -o <alias> \
   --source-dir force-app/main/default/classes \
   --source-dir force-app/main/default/objects/Amwaj_Commission_Policy__mdt \
   --source-dir force-app/main/default/customMetadata \
-  --source-dir force-app/main/default/permissionsets/SalesUI_Access.permissionset-meta.xml \
   --source-dir force-app/main/default/uiBundles/SalesUI \
   --test-level RunSpecifiedTests --tests AmwajOfferServiceTest --tests AmwajCommissionServiceTest \
   --tests AmwajSalesApiTest --tests PaymentPlanViewerControllerTest
+# Deploy the permission set separately, after the class exists (deploying it with a brand-new class is what lost the grant):
+sf project deploy start -o <alias> --source-dir force-app/main/default/permissionsets/SalesUI_Access.permissionset-meta.xml
 ```
-Users need `SalesUI_Access` (grants the app and `AmwajSalesApi` only) plus their existing sales permission set.
-Local preview: `npm run dev` in the bundle folder (proxies to the default org as the CLI user).
+Then confirm: `SELECT Parent.Name FROM SetupEntityAccess WHERE SetupEntityId IN (SELECT Id FROM ApexClass WHERE Name = 'AmwajSalesApi')`.
 
-## Manager demo (about 5 minutes)
+## 8. Manager demo (about 5 minutes, as a sales user)
 
-1. **Overview** – personal counts, unit holds with expiry, EOIs needing action, commission. Point out holds past expiry: the open decision on automatic release.
-2. **Units** – filter by project and bedrooms; open a Gardenes unit: live price and the org's payment plans, with an honest no-photo state.
-3. **Start EOI** – choose a customer deal; required customer details are checked as the org's flow does. Submitting without confirmation is blocked. Create: Salesforce returns the fee, net price and hold date.
-4. **EOI page** – progress (signed EOI → finance → reservation), the signed file as evidence, then "Reserve unit (14-day hold)".
-5. **My commission** – itemised property payments / booking fees / tax (not recorded) / refunds, per-EOI states, "paid: not tracked".
-6. Close with the decisions list above.
+1. **Overview** – personal counts, unit holds, EOIs needing action, and the commission *estimate* (proposed rule).
+2. **Customers → SalesUI TEST Customer 2 → Find units in The Gardenes** – the customer banner, with project and type taken from the
+   recorded interest.
+3. **Filters** – switch to New Kadhimyah Gate: Apartment is cleared because it doesn't exist there. Choose Villa and 4+ bedrooms;
+   the count and chips update and pages cover every match. Open a unit; "Back to units" keeps the filters.
+4. **Start EOI for the customer** – required details are checked as the org's flow does. Salesforce returns the fee and the
+   3-day hold from settings.
+5. **EOI page** – two-stage hold explained (EOI 3 days, reservation 14 days); finance and filing steps aren't available to reps.
+6. **My commission** – proposed rule labelled as such; tax "not recorded"; payouts "not tracked".
+7. Close with the defects and decisions in §2 and §6.

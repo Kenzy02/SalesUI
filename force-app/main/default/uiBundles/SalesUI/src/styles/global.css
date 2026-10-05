@@ -139,6 +139,10 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Let grid columns shrink on phones so wide tables scroll inside their card instead of the page. */
+  .grid > * {
+    min-width: 0;
+  }
 }
 
 @theme inline {
