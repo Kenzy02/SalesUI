@@ -16,7 +16,7 @@ export default function CommissionPage() {
       <PageHeader
         eyebrow="My performance"
         title="My commission"
-        description="Calculated by Salesforce from collections finance has confirmed on your deals. Nothing here is entered by hand."
+        description="An estimate calculated in Salesforce from collections finance has confirmed on deals you own. The rule below is a proposal added for this workspace and is not yet confirmed Amwaj policy."
       />
       {loading && !c ? (
         <LoadingBlock rows={4} label="Calculating commission" />
@@ -26,9 +26,9 @@ export default function CommissionPage() {
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard
-              label="Calculated commission"
+              label="Commission estimate"
               value={m(c.commission)}
-              hint={rate != null ? `${rate}% of eligible collections` : 'Commission rate not configured'}
+              hint={rate != null ? `Proposed ${rate}% of eligible collections` : 'No commission rule is active'}
               icon={<Wallet className="size-4" />}
             />
             <StatCard label="Eligible collections" value={m(c.eligibleBasis, 0)} hint="Confirmed, on signed EOIs" />
@@ -36,7 +36,7 @@ export default function CommissionPage() {
             <StatCard
               label="Commission paid"
               value={c.paidTracked ? m(c.paid) : 'Not tracked'}
-              hint={c.paidTracked ? undefined : 'Salesforce has no record of commission payouts yet'}
+              hint={c.paidTracked ? undefined : 'Salesforce has no record of commission payouts, so nothing is shown'}
             />
           </div>
 
@@ -53,12 +53,15 @@ export default function CommissionPage() {
                 <tbody className="divide-y divide-border">
                   <Row label="Property payments" hint="Reservation deposits confirmed by finance" amount={m(c.propertyPayments, 0)} commission={rate != null ? m(c.propertyCommission) : '—'} />
                   <Row label="Booking fees" hint="EOI reservation fees confirmed by finance" amount={m(c.bookingFees, 0)} commission={rate != null ? m(c.bookingFeeCommission) : '—'} />
-                  <Row label="Tax" hint="Not recorded in Salesforce, so nothing is counted" amount={c.taxRecorded ? m(c.tax, 0) : 'Not recorded'} commission={c.taxRecorded && rate != null ? m(c.taxCommission) : '—'} />
+                  <Row label="Tax" hint="Not recorded in Salesforce: unavailable, not zero" amount={c.taxRecorded ? m(c.tax, 0) : 'Not recorded'} commission={c.taxRecorded && rate != null ? m(c.taxCommission) : '—'} />
                   <Row label="Refunds" hint="Processed refunds are deducted" amount={c.refunds ? `− ${m(c.refunds, 0)}` : m(0, 0)} commission={c.refunds && rate != null ? `− ${m(c.refundCommission)}` : '—'} />
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-brand-navy/20 font-semibold text-brand-navy">
-                    <th scope="row" className="py-3 pr-3 text-left">Total eligible</th>
+                    <th scope="row" className="py-3 pr-3 text-left">
+                      Total eligible
+                      <div className="text-xs font-normal text-muted-foreground">Excludes tax, which isn't recorded</div>
+                    </th>
                     <td className="py-3 pr-3 text-right">{m(c.eligibleBasis, 0)}</td>
                     <td className="py-3 text-right">{m(c.commission)}</td>
                   </tr>
@@ -128,12 +131,16 @@ export default function CommissionPage() {
               <Info className="mt-0.5 size-4 shrink-0 text-brand-steel" aria-hidden="true" />
               <div className="space-y-1.5">
                 <p>
-                  <strong className="text-brand-navy">How it works.</strong> An EOI starts earning commission once its signed document is on file
-                  in Salesforce. Collections confirmed before signing count from that moment. Each confirmation is counted once, and later
-                  confirmations are added automatically.
+                  <strong className="text-brand-navy">Proposed rule (requested for this workspace, not existing Amwaj policy).</strong> An EOI
+                  counts once its signed document is on file in Salesforce; collections confirmed before signing count from that moment. Each
+                  confirmation is counted once, and later confirmations are added automatically. Requested or scheduled payments that finance
+                  hasn't confirmed are never counted.
                 </p>
-                <p>Requested or scheduled payments that finance hasn't confirmed are never counted. Processed refunds reduce the total.</p>
-                <p>Commission belongs to the owner of the customer deal. Payout approval and payment happen outside this app.</p>
+                <p>
+                  <strong className="text-brand-navy">Assumptions awaiting confirmation:</strong> commission goes to the current owner of the
+                  customer deal; processed refunds reduce it (an expired or cancelled EOI keeps it until a refund is processed); there are no
+                  splits; payout approval and payment happen outside this app.
+                </p>
               </div>
             </div>
           </Section>

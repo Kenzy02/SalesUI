@@ -7,7 +7,7 @@ import { MeContext } from '@/components/app/MeContext';
 import { ErrorState, LoadingBlock } from '@/components/app/Primitives';
 import { Toaster } from '@/components/ui/sonner';
 import { useApi } from '@/hooks/useApi';
-import { initials } from '@/lib/format';
+import { initials, setDisplayTimeZone } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 const NAV = [
@@ -20,7 +20,11 @@ const NAV = [
 ];
 
 export default function AppLayout() {
-  const me = useApi(() => salesApi.me(), []);
+  const me = useApi(async () => {
+    const result = await salesApi.me();
+    setDisplayTimeZone(result.timeZone);
+    return result;
+  }, []);
   const location = useLocation();
   const mainRef = useRef<HTMLElement>(null);
   const previousPath = useRef<string | null>(null);
@@ -95,7 +99,16 @@ export default function AppLayout() {
         {me.loading && !me.data ? (
           <LoadingBlock rows={4} label="Connecting to Salesforce" />
         ) : me.error && !me.data ? (
-          <ErrorState message={me.error} onRetry={me.reload} />
+          <ErrorState
+            message={
+              me.errorInfo?.status === 403
+                ? 'Your Salesforce user cannot open the sales workspace yet. It needs the "SalesUI Access" permission set.'
+                : me.error
+            }
+            status={me.errorInfo?.status}
+            detail={me.errorInfo?.detail}
+            onRetry={me.reload}
+          />
         ) : (
           <MeContext.Provider value={me.data}>
             <Outlet />

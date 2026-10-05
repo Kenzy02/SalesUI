@@ -68,8 +68,9 @@ private class AmwajSalesApiTest {
     }
 
     @IsTest
-    static void leadStatusUpdateAndActivitiesGate() {
+    static void leadStatusUpdateAndFollowUpsAsRep() {
         Lead mine = [SELECT Id FROM Lead WHERE LastName = 'Adel'];
+        Lead peers = [SELECT Id FROM Lead WHERE LastName = 'Ali'];
         Test.startTest();
         System.runAs(AmwajSalesTestData.rep('rep1')) {
             Map<String, Object> updated = call('PATCH', 'leads/' + mine.Id, new Map<String, Object>{ 'status' => 'Working' });
@@ -77,14 +78,18 @@ private class AmwajSalesApiTest {
             Assert.areEqual('Working', updated.get('status'));
             Assert.areEqual(1, call('GET', 'overview', null).get('openLeads'));
 
-            // Reps' profile + permission sets grant no read access to Task.WhoId / ActivityDate.
-            Assert.areEqual(false, call('GET', 'me', null).get('activitiesEnabled'));
-            Map<String, Object> refused = call(
+            // SalesUI_Access grants the Task fields (WhoId, WhatId, ActivityDate, Description).
+            Assert.areEqual(true, call('GET', 'me', null).get('activitiesEnabled'));
+            Map<String, Object> logged = call(
                 'POST',
                 'leads/' + mine.Id + '/activities',
-                new Map<String, Object>{ 'kind' => 'CALL', 'subject' => 'Intro call' }
+                new Map<String, Object>{ 'kind' => 'FOLLOW_UP', 'subject' => 'Site visit', 'dueDate' => Date.today().addDays(1) }
             );
-            Assert.areEqual(403, refused.get('_status'));
+            Assert.areEqual(200, logged.get('_status'), '' + logged.get('error'));
+            Assert.areEqual(1, items(call('GET', 'overview', null), 'followUps').size());
+
+            // Peers' leads stay out of reach for activities too.
+            Assert.areNotEqual(200, call('POST', 'leads/' + peers.Id + '/activities', new Map<String, Object>{ 'kind' => 'CALL', 'subject' => 'x' }).get('_status'));
         }
         Test.stopTest();
     }
@@ -130,6 +135,25 @@ private class AmwajSalesApiTest {
         System.runAs(AmwajSalesTestData.rep('rep1')) {
             Map<String, Object> facets = call('GET', 'units/facets', null);
             Assert.isFalse(items(facets, 'projects').isEmpty());
+            Id projectId = [SELECT Id FROM Project__c WHERE ProjectCode__c = 'AWTP'].Id;
+            Boolean apartmentInProject = false;
+            for (Object o : items(facets, 'typesByProject')) {
+                Map<String, Object> t = (Map<String, Object>) o;
+                if (t.get('projectId') == String.valueOf(projectId) && t.get('unitType') == 'Apartment') {
+                    apartmentInProject = true;
+                    Assert.areEqual(3, t.get('available'), 'Three available apartments in the test project');
+                }
+            }
+            Assert.isTrue(apartmentInProject, 'Unit types come from the project inventory');
+            for (Object o : items(facets, 'projects')) {
+                Map<String, Object> p = (Map<String, Object>) o;
+                if (p.get('id') == String.valueOf(projectId)) {
+                    Assert.areEqual(true, p.get('hasPaymentPlans'));
+                }
+            }
+            Assert.areEqual(1, items(call('GET', 'deals?projectId=' + projectId, null), 'deals').size());
+            Assert.areEqual(0, items(call('GET', 'leads?projectId=' + projectId, null), 'leads').size(), 'Test leads record no project interest');
+            Assert.areEqual(3, call('GET', 'units?projectId=' + projectId + '&unitType=Apartment&status=Available', null).get('total'));
 
             Map<String, Object> units = call('GET', 'units?status=Available&search=AW-U&minBedrooms=2', null);
             Assert.areEqual(3, units.get('total'));

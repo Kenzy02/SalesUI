@@ -14,6 +14,9 @@ export interface Me {
   name: string;
   firstName?: string;
   currencyCode: string;
+  /** Salesforce user time zone, e.g. Asia/Baghdad. */
+  timeZone?: string;
+  locale?: string;
   today: string;
   eoiPeriodDays?: number;
   reservationHoldDays?: number;
@@ -38,8 +41,13 @@ export interface LeadRow {
   mobile?: string;
   email?: string;
   city?: string;
+  projectInterestId?: string;
   projectInterest?: string;
+  secondProjectInterestId?: string;
+  interestedUnitId?: string;
   interestedUnit?: string;
+  /** Unit type of the recorded interested unit (the only unit-type preference the org records). */
+  interestedUnitType?: string;
   desiredArea?: number;
   createdDate?: string;
   lastActivityDate?: string;
@@ -70,7 +78,6 @@ export interface LeadDetail extends LeadRow {
   organization?: string;
   salesDepartment?: string;
   secondProjectInterest?: string;
-  interestedUnitId?: string;
   buyerName?: string;
   brokerName?: string;
   ownerName?: string;
@@ -103,6 +110,7 @@ export interface DealRow {
   projectName?: string;
   interestedUnitId?: string;
   interestedUnitName?: string;
+  interestedUnitType?: string;
   ownerName?: string;
 }
 
@@ -206,11 +214,21 @@ export interface ProjectFacet {
   salesDepartment?: string;
   availableUnits?: number;
   totalUnits?: number;
+  /** At least one active, effective payment plan exists for the project. */
+  hasPaymentPlans?: boolean;
+}
+
+export interface ProjectUnitType {
+  projectId: string;
+  unitType: string;
+  available: number;
+  total: number;
 }
 
 export interface UnitFacets {
   projects: ProjectFacet[];
   zones: { projectId: string; zone: string }[];
+  typesByProject: ProjectUnitType[];
   unitTypes: Option[];
   statuses: Option[];
 }
@@ -334,13 +352,15 @@ export interface CommissionSummary {
   paidTracked: boolean;
 }
 
+/** Each panel loads independently; a failed panel is reported in sectionErrors and its data is absent. */
 export interface Overview {
-  openLeads: number;
-  leadsByStatus: Record<string, number>;
-  followUps: OverviewFollowUp[];
-  holds: Hold[];
-  eoisAwaitingAction: EoiRow[];
-  commission: CommissionSummary;
+  openLeads?: number;
+  leadsByStatus?: Record<string, number>;
+  followUps?: OverviewFollowUp[];
+  holds?: Hold[];
+  eoisAwaitingAction?: EoiRow[];
+  commission?: CommissionSummary;
+  sectionErrors: Partial<Record<'leads' | 'followUps' | 'eois' | 'commission', string>>;
 }
 
 export type CommissionState = 'ELIGIBLE' | 'AWAITING_SIGNATURE' | 'NO_CONFIRMED_COLLECTIONS';

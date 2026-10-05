@@ -224,7 +224,7 @@ export default function NewEoiPage() {
                 <SelectedUnit unit={unit.data} currency={me.currencyCode} onChange={() => set('unitId', '')} />
               ) : null
             ) : (
-              <UnitPicker preferredProjectId={deal.data?.projectId} onPick={id => set('unitId', id)} currency={me.currencyCode} />
+              <UnitPicker preferredProjectId={deal.data?.projectId} dealId={dealId} onPick={id => set('unitId', id)} currency={me.currencyCode} />
             )}
             {showErrors && unitId && unit.data && !unitReady && (
               <p className="mt-3 text-sm font-medium text-rose-700">This unit can't be offered. Choose another available unit.</p>
@@ -419,7 +419,17 @@ function SelectedUnit({ unit, currency, onChange }: { unit: UnitDetail; currency
   );
 }
 
-function UnitPicker({ preferredProjectId, onPick, currency }: { preferredProjectId?: string; onPick: (id: string) => void; currency: string }) {
+function UnitPicker({
+  preferredProjectId,
+  dealId,
+  onPick,
+  currency,
+}: {
+  preferredProjectId?: string;
+  dealId?: string;
+  onPick: (id: string) => void;
+  currency: string;
+}) {
   const [term, setTerm] = useState('');
   const [query, setQuery] = useState('');
   useEffect(() => {
@@ -445,7 +455,11 @@ function UnitPicker({ preferredProjectId, onPick, currency }: { preferredProject
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
         {preferredProjectId ? "Showing available units in the deal's project. " : ''}
-        Or <Link to="/units" className="font-medium text-brand-steel underline">browse all units</Link>.
+        Or{' '}
+        <Link to={dealId ? `/units?dealId=${dealId}` : '/units'} className="font-medium text-brand-steel underline">
+          browse units with filters
+        </Link>
+        {dealId ? ' (your customer stays selected)' : ''}.
       </p>
       <div className="mt-3">
         {results.loading && !results.data ? (

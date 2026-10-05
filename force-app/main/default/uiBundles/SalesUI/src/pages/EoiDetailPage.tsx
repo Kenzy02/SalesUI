@@ -202,10 +202,14 @@ function Progress({ eoi }: { eoi: EoiRow }) {
 }
 
 function HoldCard({ eoi, today }: { eoi: EoiRow; today: string }) {
+  const me = useMe();
   const days = daysUntil(eoi.expiryDate, today);
   const live = eoi.nextStep && !['RESERVED', 'CLOSED'].includes(eoi.nextStep);
   return (
-    <Section title="Unit hold">
+    <Section
+      title="Unit hold"
+      description={`Stage 1 · EOI hold: ${me.eoiPeriodDays ?? '—'} days. Stage 2 · Reservation hold after payment: ${me.reservationHoldDays ?? '—'} days. Both come from Salesforce settings.`}
+    >
       {!live ? (
         <p className="text-sm text-muted-foreground">
           {eoi.nextStep === 'RESERVED' ? 'The unit is now held by the reservation.' : 'This EOI no longer holds the unit.'}

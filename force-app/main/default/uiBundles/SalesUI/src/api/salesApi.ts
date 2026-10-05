@@ -31,11 +31,18 @@ const BASE = '/services/apexrest/amwaj/sales/v1';
 
 export class ApiError extends Error {
   readonly status: number;
+  /** Server message kept for troubleshooting (shown under "Details"). */
+  readonly detail?: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, detail?: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.detail = detail;
+  }
+
+  get isPermission(): boolean {
+    return this.status === 403;
   }
 }
 
@@ -84,7 +91,7 @@ async function request<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?:
     const apiMessage =
       (json as { error?: string } | undefined)?.error ??
       (Array.isArray(json) ? (json[0] as { message?: string })?.message : undefined);
-    throw new ApiError(res.status, apiMessage || messageForStatus(res.status));
+    throw new ApiError(res.status, apiMessage || messageForStatus(res.status), `HTTP ${res.status}${apiMessage ? `: ${apiMessage}` : ''}`);
   }
   return json as T;
 }
@@ -104,8 +111,8 @@ export const salesApi = {
   me: () => request<Me>('GET', '/me'),
   overview: () => request<Overview>('GET', '/overview'),
 
-  leads: (status?: string, search?: string) =>
-    request<{ leads: LeadRow[]; statusOptions: Option[] }>('GET', `/leads${query({ status, search })}`),
+  leads: (status?: string, search?: string, projectId?: string) =>
+    request<{ leads: LeadRow[]; statusOptions: Option[] }>('GET', `/leads${query({ status, search, projectId })}`),
   lead: (id: string) => request<LeadDetail>('GET', `/leads/${enc(id)}`),
   updateLead: (id: string, changes: { status?: string; rating?: string; description?: string }) =>
     request<LeadDetail>('PATCH', `/leads/${enc(id)}`, changes),
@@ -117,7 +124,7 @@ export const salesApi = {
   ) => request<{ activities: Activity[] }>('POST', `/${parent}/${enc(id)}/activities`, activity),
   completeActivity: (taskId: string) => request<{ id: string }>('POST', `/activities/${enc(taskId)}/complete`),
 
-  deals: (search?: string) => request<{ deals: DealRow[] }>('GET', `/deals${query({ search })}`),
+  deals: (search?: string, projectId?: string) => request<{ deals: DealRow[] }>('GET', `/deals${query({ search, projectId })}`),
   deal: (id: string) => request<DealDetail>('GET', `/deals/${enc(id)}`),
 
   unitFacets: () => request<UnitFacets>('GET', '/units/facets'),

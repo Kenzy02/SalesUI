@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { ChevronRight, Handshake, Search } from 'lucide-react';
 import { salesApi } from '@/api/salesApi';
 import type { DealRow } from '@/api/salesTypes';
 import { useMe } from '@/components/app/MeContext';
 import { EmptyState, ErrorState, LoadingBlock, PageHeader, Section, StatusPill } from '@/components/app/Primitives';
-import { TextInput } from '@/components/app/FormControls';
+import { NativeSelect, TextInput } from '@/components/app/FormControls';
 import { useApi } from '@/hooks/useApi';
 import { money } from '@/lib/format';
 import { DEAL_STAGE } from '@/lib/salesLabels';
@@ -26,7 +26,19 @@ export default function CustomersPage() {
     const t = setTimeout(() => setSearch(searchInput.trim()), 300);
     return () => clearTimeout(t);
   }, [searchInput]);
-  const { data, loading, error, reload } = useApi(() => salesApi.deals(search || undefined), [search]);
+  const [params, setParams] = useSearchParams();
+  const projectId = params.get('projectId') ?? '';
+  const facets = useApi(() => salesApi.unitFacets(), []);
+  const { data, loading, error, errorInfo, reload } = useApi(
+    () => salesApi.deals(search || undefined, projectId || undefined),
+    [search, projectId]
+  );
+  const setProject = (value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set('projectId', value);
+    else next.delete('projectId');
+    setParams(next, { replace: true });
+  };
 
   return (
     <>
@@ -35,7 +47,16 @@ export default function CustomersPage() {
         title="Customers"
         description="Deals you own in Salesforce. An EOI and unit hold always start from one of these deals."
       />
-      <div className="mb-4 relative w-full sm:w-80">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+      <NativeSelect aria-label="Filter by deal project" className="sm:w-56" value={projectId} onChange={e => setProject(e.target.value)}>
+        <option value="">All projects</option>
+        {facets.data?.projects.map(p => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </NativeSelect>
+      <div className="relative w-full sm:w-80">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         <TextInput
           type="search"
@@ -46,16 +67,17 @@ export default function CustomersPage() {
           onChange={e => setSearchInput(e.target.value)}
         />
       </div>
+      </div>
       {loading && !data ? (
         <LoadingBlock rows={4} label="Loading customers" />
       ) : error && !data ? (
-        <ErrorState message={error} onRetry={reload} />
+        <ErrorState message={error} status={errorInfo?.status} detail={errorInfo?.detail} onRetry={reload} />
       ) : data && data.deals.length === 0 ? (
         <Section>
-          <EmptyState icon={<Handshake className="size-5" />} title={search ? 'No customers match' : 'No customer deals yet'}>
-            {search
-              ? 'Try another name.'
-              : 'Deals appear here when a qualified lead is converted in Salesforce, or a deal is assigned to you.'}
+          <EmptyState icon={<Handshake className="size-5" />} title={search || projectId ? 'No customers match' : 'No customer deals assigned to you'}>
+            {search || projectId
+              ? 'Try another name or project.'
+              : 'Deals you own appear here once a qualified lead is converted in Salesforce or a deal is assigned to you.'}
           </EmptyState>
         </Section>
       ) : data ? (

@@ -79,11 +79,11 @@ global with sharing class AmwajSalesApi {
                 }
                 when 'leads' {
                     return n == 1
-                        ? AmwajSalesReadService.leads(req.params.get('status'), req.params.get('search'))
+                        ? AmwajSalesReadService.leads(req.params.get('status'), req.params.get('search'), req.params.get('projectId'))
                         : AmwajSalesReadService.leadDetail(idAt(s, 1));
                 }
                 when 'deals' {
-                    return n == 1 ? AmwajSalesReadService.deals(req.params.get('search')) : AmwajSalesReadService.dealDetail(idAt(s, 1));
+                    return n == 1 ? AmwajSalesReadService.deals(req.params.get('search'), req.params.get('projectId')) : AmwajSalesReadService.dealDetail(idAt(s, 1));
                 }
                 when 'units' {
                     if (n == 1) {

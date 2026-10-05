@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
-import { AlertTriangle, ArrowLeft, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Lock, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -132,16 +132,55 @@ export function EmptyState({ icon, title, children, action }: { icon?: ReactNode
   );
 }
 
-export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+/**
+ * Load failure. A 403 is shown as a permission problem (retrying won't help);
+ * the technical detail stays available under "Details" for support.
+ */
+export function ErrorState({
+  message,
+  onRetry,
+  status,
+  detail,
+  compact,
+}: {
+  message: string;
+  onRetry?: () => void;
+  status?: number;
+  detail?: string;
+  compact?: boolean;
+}) {
+  const permission = status === 403;
   return (
-    <div role="alert" className="flex flex-col items-center rounded-xl border border-rose-200 bg-rose-50/60 px-4 py-8 text-center">
-      <AlertTriangle className="mb-2 size-6 text-rose-700" aria-hidden="true" />
-      <p className="font-medium text-rose-900">We couldn't load this</p>
-      <p className="mt-1 max-w-md text-sm text-rose-800">{message}</p>
-      {onRetry && (
+    <div
+      role="alert"
+      className={cn(
+        'flex flex-col items-center rounded-xl border text-center',
+        compact ? 'px-3 py-5' : 'px-4 py-8',
+        permission ? 'border-amber-200 bg-amber-50/70' : 'border-rose-200 bg-rose-50/60'
+      )}
+    >
+      {permission ? (
+        <Lock className="mb-2 size-6 text-amber-800" aria-hidden="true" />
+      ) : (
+        <AlertTriangle className="mb-2 size-6 text-rose-700" aria-hidden="true" />
+      )}
+      <p className={cn('font-medium', permission ? 'text-amber-950' : 'text-rose-900')}>
+        {permission ? "You don't have access to this" : "We couldn't load this"}
+      </p>
+      <p className={cn('mt-1 max-w-md text-sm', permission ? 'text-amber-900' : 'text-rose-800')}>{message}</p>
+      {permission && (
+        <p className="mt-1 max-w-md text-xs text-amber-900">Ask your Salesforce administrator to check your permission sets.</p>
+      )}
+      {onRetry && !permission && (
         <Button variant="outline" size="lg" className="mt-4" onClick={onRetry}>
           <RefreshCw /> Try again
         </Button>
+      )}
+      {detail && (
+        <details className="mt-3 max-w-md text-left text-xs text-muted-foreground">
+          <summary className="cursor-pointer select-none">Details for support</summary>
+          <code className="mt-1 block break-words">{detail}</code>
+        </details>
       )}
     </div>
   );

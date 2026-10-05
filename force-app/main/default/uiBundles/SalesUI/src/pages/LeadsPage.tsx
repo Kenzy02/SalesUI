@@ -4,7 +4,7 @@ import { ChevronRight, Mail, Phone, Search, Users } from 'lucide-react';
 import { salesApi } from '@/api/salesApi';
 import { useMe } from '@/components/app/MeContext';
 import { EmptyState, ErrorState, LoadingBlock, PageHeader, Section, StatusPill } from '@/components/app/Primitives';
-import { TextInput } from '@/components/app/FormControls';
+import { NativeSelect, TextInput } from '@/components/app/FormControls';
 import { useApi } from '@/hooks/useApi';
 import { area, date, daysUntil } from '@/lib/format';
 import { LEAD_STATUS } from '@/lib/salesLabels';
@@ -14,6 +14,8 @@ export default function LeadsPage() {
   const me = useMe();
   const [params, setParams] = useSearchParams();
   const status = params.get('status') ?? '';
+  const projectId = params.get('projectId') ?? '';
+  const facets = useApi(() => salesApi.unitFacets(), []);
   const [searchInput, setSearchInput] = useState(params.get('search') ?? '');
   const [search, setSearch] = useState(searchInput);
 
@@ -22,14 +24,18 @@ export default function LeadsPage() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  const { data, loading, error, reload } = useApi(() => salesApi.leads(status || undefined, search || undefined), [status, search]);
+  const { data, loading, error, errorInfo, reload } = useApi(
+    () => salesApi.leads(status || undefined, search || undefined, projectId || undefined),
+    [status, search, projectId]
+  );
 
-  const setStatus = (value: string) => {
+  const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(params);
-    if (value) next.set('status', value);
-    else next.delete('status');
+    if (value) next.set(key, value);
+    else next.delete(key);
     setParams(next, { replace: true });
   };
+  const setStatus = (value: string) => setParam('status', value);
 
   return (
     <>
@@ -58,7 +64,21 @@ export default function LeadsPage() {
             </button>
           ))}
         </div>
-        <div className="relative w-full lg:w-80">
+        <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+        <NativeSelect
+          aria-label="Filter by project of interest"
+          className="sm:w-56"
+          value={projectId}
+          onChange={e => setParam('projectId', e.target.value)}
+        >
+          <option value="">All projects of interest</option>
+          {facets.data?.projects.map(p => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </NativeSelect>
+        <div className="relative w-full lg:w-72">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <TextInput
             type="search"
@@ -69,16 +89,22 @@ export default function LeadsPage() {
             onChange={e => setSearchInput(e.target.value)}
           />
         </div>
+        </div>
       </div>
+      {projectId && (
+        <p className="-mt-2 mb-4 text-xs text-muted-foreground">
+          Matches the lead's first or second project of interest. Leads don't record a preferred unit type in Salesforce.
+        </p>
+      )}
 
       {loading && !data ? (
         <LoadingBlock rows={5} label="Loading leads" />
       ) : error && !data ? (
-        <ErrorState message={error} onRetry={reload} />
+        <ErrorState message={error} status={errorInfo?.status} detail={errorInfo?.detail} onRetry={reload} />
       ) : data && data.leads.length === 0 ? (
         <Section>
-          <EmptyState icon={<Users className="size-5" />} title={status || search ? 'No leads match' : 'No leads assigned to you'}>
-            {status || search ? 'Try another status or search term.' : 'New leads routed to you in Salesforce will appear here.'}
+          <EmptyState icon={<Users className="size-5" />} title={status || search || projectId ? 'No leads match' : 'No leads assigned to you'}>
+            {status || search || projectId ? 'Try another status, project or search term.' : 'New leads routed to you in Salesforce will appear here.'}
           </EmptyState>
         </Section>
       ) : data ? (

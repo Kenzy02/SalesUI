@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { FilePlus2, Hourglass, Info } from 'lucide-react';
 import { salesApi } from '@/api/salesApi';
 import type { FileRef, UnitDetail } from '@/api/salesTypes';
+import { CustomerContextBanner, type CustomerContextData, useCustomerContext } from '@/components/app/CustomerContext';
 import { useMe } from '@/components/app/MeContext';
 import { PaymentPlanList } from '@/components/app/PaymentPlans';
 import { BackLink, DetailList, EmptyState, ErrorState, LoadingBlock, PageHeader, Section, StatusPill } from '@/components/app/Primitives';
@@ -16,29 +17,56 @@ import { cn } from '@/lib/utils';
 export default function UnitDetailPage() {
   const { id = '' } = useParams();
   const me = useMe();
-  const { data: unit, loading, error, reload } = useApi(() => salesApi.unit(id), [id]);
+  const [params, setParams] = useSearchParams();
+  const { data: unit, loading, error, errorInfo, reload } = useApi(() => salesApi.unit(id), [id]);
+  const customer = useCustomerContext(params);
+  const query = params.toString();
+
+  const clearCustomer = () => {
+    const next = new URLSearchParams(params);
+    next.delete('dealId');
+    next.delete('leadId');
+    next.delete('ctx');
+    setParams(next, { replace: true });
+  };
 
   return (
     <>
-      <BackLink to="/units">Units</BackLink>
+      {/* Back keeps the project, unit type and other filters the rep was browsing with. */}
+      <BackLink to={`/units${query ? `?${query}` : ''}`}>Back to units</BackLink>
+      <CustomerContextBanner context={customer.data} error={customer.error} onClear={clearCustomer} />
       {loading && !unit ? (
         <LoadingBlock rows={4} label="Loading unit" />
       ) : error && !unit ? (
-        <ErrorState message={error} onRetry={reload} />
+        <ErrorState message={error} status={errorInfo?.status} detail={errorInfo?.detail} onRetry={reload} />
       ) : unit ? (
-        <UnitView unit={unit} currency={me.currencyCode} canCreateEoi={me.canCreateEoi} />
+        <UnitView unit={unit} currency={me.currencyCode} canCreateEoi={me.canCreateEoi} customer={customer.data} />
       ) : null}
     </>
   );
 }
 
-function UnitView({ unit, currency, canCreateEoi }: { unit: UnitDetail; currency: string; canCreateEoi: boolean }) {
+function UnitView({
+  unit,
+  currency,
+  canCreateEoi,
+  customer,
+}: {
+  unit: UnitDetail;
+  currency: string;
+  canCreateEoi: boolean;
+  customer: CustomerContextData | null;
+}) {
   const s = unitStatus(unit.status);
   const listPrice = unit.pricing.price?.listPrice;
   const plans = unit.pricing.plans ?? [];
   const selling = unit.projectStatus === 'Selling';
   const hasPlan = plans.some(p => !p.isMisconfigured);
-  const canStart = canCreateEoi && unit.status === 'Available' && selling && listPrice != null && hasPlan;
+  const unitOfferable = canCreateEoi && unit.status === 'Available' && selling && listPrice != null && hasPlan;
+  // A lead (or a deal that already has an EOI) can't start an EOI; a deal context is carried into the form.
+  const customerBlocks = customer != null && !customer.canStartEoi;
+  const canStart = unitOfferable && !customerBlocks;
+  const eoiLink = `/eois/new?unitId=${unit.id}${customer?.kind === 'deal' ? `&dealId=${customer.id}` : ''}`;
   const images = unit.media.filter(m => m.kind === 'image');
   const floorPlans = unit.media.filter(m => m.kind === 'floorplan');
 
@@ -57,8 +85,8 @@ function UnitView({ unit, currency, canCreateEoi }: { unit: UnitDetail; currency
         actions={
           canStart ? (
             <Button asChild size="lg">
-              <Link to={`/eois/new?unitId=${unit.id}`}>
-                <FilePlus2 /> Start EOI &amp; hold this unit
+              <Link to={eoiLink}>
+                <FilePlus2 /> {customer?.kind === 'deal' ? `Start EOI for ${customer.name}` : 'Start EOI & hold this unit'}
               </Link>
             </Button>
           ) : undefined
@@ -77,7 +105,17 @@ function UnitView({ unit, currency, canCreateEoi }: { unit: UnitDetail; currency
           </span>
         </div>
       )}
-      {!canStart && !unit.myHold && (
+      {unitOfferable && customerBlocks && (
+        <div className="mb-5 flex items-start gap-3 rounded-xl border border-border bg-white px-4 py-3 text-sm text-muted-foreground">
+          <Info className="mt-0.5 size-4 shrink-0 text-brand-steel" aria-hidden="true" />
+          <span>
+            {customer?.kind === 'lead'
+              ? `${customer.name} is still a lead. Convert the lead in Salesforce to create the customer deal, then start the EOI from Customers.`
+              : `${customer?.name}'s deal already has an EOI or can't be edited by you, so a new EOI can't start from it.`}
+          </span>
+        </div>
+      )}
+      {!unitOfferable && !unit.myHold && (
         <div className="mb-5 flex items-start gap-3 rounded-xl border border-border bg-white px-4 py-3 text-sm text-muted-foreground">
           <Info className="mt-0.5 size-4 shrink-0 text-brand-steel" aria-hidden="true" />
           <span>

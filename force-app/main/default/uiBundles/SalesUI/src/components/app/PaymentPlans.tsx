@@ -67,6 +67,7 @@ export function PaymentPlanList({
                     .filter(Boolean)
                     .join(' · ')}
                 </div>
+                {!disabled && <PlanSummary plan={plan} currency={currency} />}
                 {disabled && (
                   <p className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-700">
                     <AlertTriangle className="size-3.5" aria-hidden="true" /> Not available: {plan.misconfiguredReason}
@@ -132,5 +133,32 @@ export function PaymentPlanList({
         );
       })}
     </ul>
+  );
+}
+
+/** At-a-glance comparison: what the customer pays up front, before and after handover. */
+function PlanSummary({ plan, currency }: { plan: Plan; currency: string }) {
+  const first = plan.rows?.[0];
+  const items: { label: string; value: string }[] = [];
+  if (first?.amount != null) {
+    items.push({
+      label: INSTALLMENT_TYPE[first.installmentType ?? ''] ?? 'First payment',
+      value: `${money(first.amount, currency)} (${pct(first.pct)})`,
+    });
+  }
+  if (plan.preHandoverAmount != null) items.push({ label: 'Before handover', value: pct(plan.preHandoverPct) });
+  if (plan.postHandoverAmount != null && (plan.postHandoverAmount ?? 0) > 0) {
+    items.push({ label: 'After handover', value: pct(plan.postHandoverPct) });
+  }
+  if (!items.length) return null;
+  return (
+    <dl className="mt-2 flex flex-wrap gap-1.5">
+      {items.map(i => (
+        <div key={i.label} className="rounded-md bg-muted px-2 py-1 text-xs">
+          <dt className="inline text-muted-foreground">{i.label}: </dt>
+          <dd className="inline font-semibold text-brand-navy">{i.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

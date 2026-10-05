@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router';
-import { FilePlus2, Mail, Smartphone } from 'lucide-react';
+import { Building2, FilePlus2, Mail, Smartphone } from 'lucide-react';
 import { salesApi } from '@/api/salesApi';
 import { ActivityPanel } from '@/components/app/ActivityPanel';
 import { useMe } from '@/components/app/MeContext';
@@ -13,7 +13,7 @@ import { dealProgress } from './CustomersPage';
 export default function CustomerDetailPage() {
   const { id = '' } = useParams();
   const me = useMe();
-  const { data: deal, loading, error, reload, setData } = useApi(() => salesApi.deal(id), [id]);
+  const { data: deal, loading, error, errorInfo, reload, setData } = useApi(() => salesApi.deal(id), [id]);
 
   const canStartEoi = deal && !deal.isClosed && !deal.eoiCreated && deal.canEdit && me.canCreateEoi;
 
@@ -23,7 +23,7 @@ export default function CustomerDetailPage() {
       {loading && !deal ? (
         <LoadingBlock rows={4} label="Loading customer" />
       ) : error && !deal ? (
-        <ErrorState message={error} onRetry={reload} />
+        <ErrorState message={error} status={errorInfo?.status} detail={errorInfo?.detail} onRetry={reload} />
       ) : deal ? (
         <>
           <PageHeader
@@ -37,13 +37,20 @@ export default function CustomerDetailPage() {
               </span>
             }
             actions={
-              canStartEoi ? (
-                <Button asChild size="lg">
-                  <Link to={`/eois/new?dealId=${deal.id}${deal.interestedUnitId ? `&unitId=${deal.interestedUnitId}` : ''}`}>
-                    <FilePlus2 /> Start EOI &amp; hold a unit
+              <>
+                <Button asChild size="lg" variant={canStartEoi ? 'outline' : 'default'}>
+                  <Link to={`/units?dealId=${deal.id}`}>
+                    <Building2 /> Find units{deal.projectName ? ` in ${deal.projectName}` : ''}
                   </Link>
                 </Button>
-              ) : undefined
+                {canStartEoi && (
+                  <Button asChild size="lg">
+                    <Link to={`/eois/new?dealId=${deal.id}${deal.interestedUnitId ? `&unitId=${deal.interestedUnitId}` : ''}`}>
+                      <FilePlus2 /> Start EOI
+                    </Link>
+                  </Button>
+                )}
+              </>
             }
           />
           <div className="grid gap-6 lg:grid-cols-3">

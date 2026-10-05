@@ -19,6 +19,21 @@ export function money(value: number | null | undefined, currency: string, fracti
 }
 
 const dateFormat = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+let dateTimeFormat = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+/**
+ * Use the Salesforce user's time zone for timestamps (e.g. created dates), so they
+ * match Salesforce rather than the device. Date-only values are calendar days and
+ * are never shifted.
+ */
+export function setDisplayTimeZone(timeZone: string | undefined) {
+  if (!timeZone) return;
+  try {
+    dateTimeFormat = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone });
+  } catch {
+    /* unknown zone: keep the device zone */
+  }
+}
 
 /** Parses Salesforce dates ('2026-10-05') as local calendar days, datetimes as instants. */
 export function parseDate(value: string | null | undefined): Date | null {
@@ -33,7 +48,8 @@ export function parseDate(value: string | null | undefined): Date | null {
 
 export function date(value: string | null | undefined): string {
   const d = parseDate(value);
-  return d ? dateFormat.format(d) : '—';
+  if (!d) return '—';
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? dateFormat.format(d) : dateTimeFormat.format(d);
 }
 
 /** Whole days from `today` to `value` (negative = in the past). */

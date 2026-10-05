@@ -22,6 +22,8 @@ public with sharing class AmwajSalesReadService {
             'name' => users.isEmpty() ? UserInfo.getName() : users[0].Name,
             'firstName' => users.isEmpty() ? UserInfo.getFirstName() : users[0].FirstName,
             'currencyCode' => UserInfo.getDefaultCurrency(),
+            'timeZone' => UserInfo.getTimeZone().getID(),
+            'locale' => UserInfo.getLocale(),
             'today' => Date.today(),
             'eoiPeriodDays' => s.EOI_Period_Days__c,
             'reservationHoldDays' => s.DefaultHoldDays__c,
@@ -43,8 +45,12 @@ public with sharing class AmwajSalesReadService {
         'mobile' => 'MobilePhone',
         'email' => 'Email',
         'city' => 'City__c',
+        'projectInterestId' => 'Project_Interest__c',
         'projectInterest' => 'Project_Interest__r.Name',
+        'secondProjectInterestId' => 'nd_Project_of_Interest__c',
+        'interestedUnitId' => 'Interested_Unit__c',
         'interestedUnit' => 'Interested_Unit__r.Name',
+        'interestedUnitType' => 'Interested_Unit__r.Unit_Type__c',
         'desiredArea' => 'DesiredUnitArea__c',
         'createdDate' => 'CreatedDate',
         'lastActivityDate' => 'LastActivityDate'
@@ -60,7 +66,6 @@ public with sharing class AmwajSalesReadService {
         'organization' => 'Organization__c',
         'salesDepartment' => 'Sales_Department__c',
         'secondProjectInterest' => 'nd_Project_of_Interest__r.Name',
-        'interestedUnitId' => 'Interested_Unit__c',
         'buyerName' => 'Buyer__r.Name',
         'brokerName' => 'Broker__r.Name',
         'ownerName' => 'Owner.Name',
@@ -86,7 +91,7 @@ public with sharing class AmwajSalesReadService {
         return byLead;
     }
 
-    public static Map<String, Object> leads(String status, String search) {
+    public static Map<String, Object> leads(String status, String search, String projectId) {
         AmwajSalesSupport.requireReadable(Lead.SObjectType);
         Id me = AmwajSalesSupport.currentUserId();
         String term = AmwajSalesSupport.likeTerm(search);
@@ -98,6 +103,10 @@ public with sharing class AmwajSalesReadService {
         }
         if (term != null) {
             soql += ' AND (Name LIKE :term OR MobilePhone LIKE :term OR Email LIKE :term)';
+        }
+        if (String.isNotBlank(projectId)) {
+            // First or second project of interest, as recorded on the lead.
+            soql += ' AND (Project_Interest__c = :projectId OR nd_Project_of_Interest__c = :projectId)';
         }
         soql += ' WITH USER_MODE ORDER BY CreatedDate DESC LIMIT 200';
 
@@ -190,11 +199,12 @@ public with sharing class AmwajSalesReadService {
         'projectName' => 'Project__r.Name',
         'interestedUnitId' => 'Interested_Unit__c',
         'interestedUnitName' => 'Interested_Unit__r.Name',
+        'interestedUnitType' => 'Interested_Unit__r.Unit_Type__c',
         'ownerId' => 'OwnerId',
         'ownerName' => 'Owner.Name'
     };
 
-    public static Map<String, Object> deals(String search) {
+    public static Map<String, Object> deals(String search, String projectId) {
         AmwajSalesSupport.requireReadable(Opportunity.SObjectType);
         Id me = AmwajSalesSupport.currentUserId();
         String term = AmwajSalesSupport.likeTerm(search);
@@ -202,6 +212,9 @@ public with sharing class AmwajSalesReadService {
             ' FROM Opportunity WHERE OwnerId = :me';
         if (term != null) {
             soql += ' AND (Name LIKE :term OR Account.Name LIKE :term)';
+        }
+        if (String.isNotBlank(projectId)) {
+            soql += ' AND Project__c = :projectId';
         }
         soql += ' WITH USER_MODE ORDER BY IsClosed ASC, LastModifiedDate DESC LIMIT 200';
         List<Map<String, Object>> out = new List<Map<String, Object>>();
@@ -299,9 +312,55 @@ public with sharing class AmwajSalesReadService {
                 zones.add(new Map<String, Object>{ 'projectId' => ar.get('projectId'), 'zone' => ar.get('zone') });
             }
         }
+        // Unit types that actually exist in each project (Unit_Type__c is an independent picklist,
+        // so validity per project comes from the inventory itself).
+        List<Map<String, Object>> typesByProject = new List<Map<String, Object>>();
+        if (AmwajSalesSupport.canRead(Inventory__c.SObjectType, 'Unit_Type__c')) {
+            Map<String, Map<String, Object>> byKey = new Map<String, Map<String, Object>>();
+            for (AggregateResult ar : [
+                SELECT Project__c projectId, Unit_Type__c unitType, Status__c status, COUNT(Id) c
+                FROM Inventory__c
+                WHERE Unit_Type__c != NULL
+                WITH USER_MODE
+                GROUP BY Project__c, Unit_Type__c, Status__c
+            ]) {
+                String key = ar.get('projectId') + '|' + ar.get('unitType');
+                if (!byKey.containsKey(key)) {
+                    byKey.put(key, new Map<String, Object>{
+                        'projectId' => ar.get('projectId'), 'unitType' => ar.get('unitType'), 'available' => 0, 'total' => 0
+                    });
+                }
+                Map<String, Object> entry = byKey.get(key);
+                Integer c = (Integer) ar.get('c');
+                entry.put('total', (Integer) entry.get('total') + c);
+                if (ar.get('status') == 'Available') {
+                    entry.put('available', (Integer) entry.get('available') + c);
+                }
+            }
+            typesByProject = byKey.values();
+        }
+        // Projects with at least one live payment plan (same window as PaymentPlanViewerController).
+        Set<Id> projectsWithPlans = new Set<Id>();
+        if (Schema.SObjectType.PaymentPlan__c.isAccessible()) {
+            for (AggregateResult ar : [
+                SELECT Project__c projectId
+                FROM PaymentPlan__c
+                WHERE IsActive__c = TRUE
+                    AND (EffectiveFrom__c = NULL OR EffectiveFrom__c <= TODAY)
+                    AND (EffectiveTo__c = NULL OR EffectiveTo__c >= TODAY)
+                WITH USER_MODE
+                GROUP BY Project__c
+            ]) {
+                projectsWithPlans.add((Id) ar.get('projectId'));
+            }
+        }
+        for (Map<String, Object> p : projects) {
+            p.put('hasPaymentPlans', projectsWithPlans.contains((Id) p.get('id')));
+        }
         return new Map<String, Object>{
             'projects' => projects,
             'zones' => zones,
+            'typesByProject' => typesByProject,
             'unitTypes' => AmwajSalesSupport.picklist(Inventory__c.Unit_Type__c),
             'statuses' => AmwajSalesSupport.picklist(Inventory__c.Status__c)
         };
@@ -582,9 +641,46 @@ public with sharing class AmwajSalesReadService {
     // ------------------------------------------------------------------ overview
 
     public static Map<String, Object> overview() {
-        Id me = AmwajSalesSupport.currentUserId();
+        Map<String, Object> out = new Map<String, Object>();
+        Map<String, String> sectionErrors = new Map<String, String>();
         Date today = Date.today();
 
+        try {
+            out.putAll(leadCounts());
+        } catch (Exception e) {
+            sectionErrors.put('leads', sectionError(e));
+        }
+        try {
+            out.put('followUps', upcomingFollowUps(today));
+        } catch (Exception e) {
+            sectionErrors.put('followUps', sectionError(e));
+        }
+        try {
+            out.putAll(holdsAndEois(today));
+        } catch (Exception e) {
+            sectionErrors.put('eois', sectionError(e));
+        }
+        try {
+            out.put('commission', AmwajCommissionService.forCurrentUser().summary());
+        } catch (Exception e) {
+            sectionErrors.put('commission', sectionError(e));
+        }
+        out.put('sectionErrors', sectionErrors);
+        return out;
+    }
+
+    private static String sectionError(Exception e) {
+        if (e instanceof AmwajSalesException) {
+            return e.getMessage();
+        }
+        System.debug(LoggingLevel.ERROR, 'AmwajSalesReadService.overview: ' + e.getTypeName() + ': ' + e.getMessage());
+        return e instanceof NoAccessException || e.getMessage().containsIgnoreCase('insufficient')
+            ? 'You do not have access to this information.'
+            : 'This panel could not be loaded.';
+    }
+
+    private static Map<String, Object> leadCounts() {
+        Id me = AmwajSalesSupport.currentUserId();
         Map<String, Integer> leadsByStatus = new Map<String, Integer>();
         Integer openLeads = 0;
         if (Schema.SObjectType.Lead.isAccessible()) {
@@ -599,27 +695,35 @@ public with sharing class AmwajSalesReadService {
                 openLeads += (Integer) ar.get('c');
             }
         }
+        return new Map<String, Object>{ 'openLeads' => openLeads, 'leadsByStatus' => leadsByStatus };
+    }
 
+    private static List<Map<String, Object>> upcomingFollowUps(Date today) {
+        Id me = AmwajSalesSupport.currentUserId();
         List<Map<String, Object>> followUps = new List<Map<String, Object>>();
-        if (AmwajSalesSupport.activitiesEnabled()) {
-            Date horizon = today.addDays(7);
-            Map<String, String> followUpRow = new Map<String, String>{
-                'subject' => 'Subject',
-                'dueDate' => 'ActivityDate',
-                'leadId' => 'WhoId',
-                'leadName' => 'Who.Name',
-                'relatedId' => 'WhatId',
-                'relatedName' => 'What.Name'
-            };
-            for (SObject t : Database.query(
-                'SELECT ' + AmwajSalesSupport.selectList(Task.SObjectType, followUpRow.values()) +
-                ' FROM Task WHERE OwnerId = :me AND IsClosed = false AND ActivityDate <= :horizon' +
-                ' WITH USER_MODE ORDER BY ActivityDate ASC NULLS LAST LIMIT 10'
-            )) {
-                followUps.add(AmwajSalesSupport.row(t, followUpRow));
-            }
+        if (!AmwajSalesSupport.activitiesEnabled()) {
+            return followUps;
         }
+        Date horizon = today.addDays(7);
+        Map<String, String> followUpRow = new Map<String, String>{
+            'subject' => 'Subject',
+            'dueDate' => 'ActivityDate',
+            'leadId' => 'WhoId',
+            'leadName' => 'Who.Name',
+            'relatedId' => 'WhatId',
+            'relatedName' => 'What.Name'
+        };
+        for (SObject t : Database.query(
+            'SELECT ' + AmwajSalesSupport.selectList(Task.SObjectType, followUpRow.values()) +
+            ' FROM Task WHERE OwnerId = :me AND IsClosed = false AND ActivityDate <= :horizon' +
+            ' WITH USER_MODE ORDER BY ActivityDate ASC NULLS LAST LIMIT 10'
+        )) {
+            followUps.add(AmwajSalesSupport.row(t, followUpRow));
+        }
+        return followUps;
+    }
 
+    private static Map<String, Object> holdsAndEois(Date today) {
         List<Map<String, Object>> eois = Schema.SObjectType.EOI__c.isAccessible()
             ? eoiRows(null, null)
             : new List<Map<String, Object>>();
@@ -641,15 +745,7 @@ public with sharing class AmwajSalesReadService {
                 }
             }
         }
-
-        return new Map<String, Object>{
-            'openLeads' => openLeads,
-            'leadsByStatus' => leadsByStatus,
-            'followUps' => followUps,
-            'holds' => holds,
-            'eoisAwaitingAction' => awaiting,
-            'commission' => AmwajCommissionService.forCurrentUser().summary()
-        };
+        return new Map<String, Object>{ 'holds' => holds, 'eoisAwaitingAction' => awaiting };
     }
 
     private static Map<String, Object> hold(Map<String, Object> eoi, String type, Object name, Date expiry, Date today) {

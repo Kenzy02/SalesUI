@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useParams } from 'react-router';
-import { ExternalLink, Mail, Phone, Smartphone } from 'lucide-react';
+import { Link, useParams } from 'react-router';
+import { Building2, ExternalLink, Mail, Phone, Smartphone } from 'lucide-react';
 import { salesApi } from '@/api/salesApi';
 import type { LeadDetail } from '@/api/salesTypes';
 import { ActivityPanel } from '@/components/app/ActivityPanel';
@@ -24,7 +24,7 @@ import { LEAD_STATUS } from '@/lib/salesLabels';
 
 export default function LeadDetailPage() {
   const { id = '' } = useParams();
-  const { data: lead, loading, error, reload, setData } = useApi(() => salesApi.lead(id), [id]);
+  const { data: lead, loading, error, errorInfo, reload, setData } = useApi(() => salesApi.lead(id), [id]);
 
   return (
     <>
@@ -32,7 +32,7 @@ export default function LeadDetailPage() {
       {loading && !lead ? (
         <LoadingBlock rows={4} label="Loading lead" />
       ) : error && !lead ? (
-        <ErrorState message={error} onRetry={reload} />
+        <ErrorState message={error} status={errorInfo?.status} detail={errorInfo?.detail} onRetry={reload} />
       ) : lead ? (
         <>
           <PageHeader
@@ -205,6 +205,11 @@ function ConvertCard({ lead }: { lead: LeadDetail }) {
   const url = salesforceRecordUrl('Lead', lead.id);
   return (
     <Section title="Ready to buy?">
+      <Button asChild size="lg" className="mb-3 w-full">
+        <Link to={`/units?leadId=${lead.id}`}>
+          <Building2 /> Find units{lead.projectInterest ? ` in ${lead.projectInterest}` : ''}
+        </Link>
+      </Button>
       <p className="text-sm text-muted-foreground">
         EOIs are created on a customer deal. When this lead is qualified, convert it in Salesforce
         {lead.buyerName ? ` into the existing customer ${lead.buyerName}` : ''}. The new deal then appears under Customers.
