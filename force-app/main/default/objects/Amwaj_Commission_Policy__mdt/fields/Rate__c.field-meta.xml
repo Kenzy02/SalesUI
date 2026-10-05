@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Rate__c</fullName>
+    <description>Commission rate applied to confirmed collections (booking fees, property payments and tax, net of processed refunds) on EOIs with a signed EOI document on file.</description>
+    <externalId>false</externalId>
+    <fieldManageability>DeveloperControlled</fieldManageability>
+    <inlineHelpText>Percentage of eligible confirmed collections paid as sales commission, e.g. 1 = 1%.</inlineHelpText>
+    <label>Rate</label>
+    <precision>5</precision>
+    <required>false</required>
+    <scale>2</scale>
+    <type>Percent</type>
+</CustomField>

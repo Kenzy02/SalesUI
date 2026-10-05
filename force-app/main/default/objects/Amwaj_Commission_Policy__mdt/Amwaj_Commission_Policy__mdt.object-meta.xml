@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Sales commission policy used by the SalesUI sales workspace (AmwajCommissionService). Only administrators can change it. The record named Default is the active policy.</description>
+    <label>Amwaj Commission Policy</label>
+    <pluralLabel>Amwaj Commission Policies</pluralLabel>
+    <visibility>Public</visibility>
+</CustomObject>
