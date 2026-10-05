@@ -4,6 +4,11 @@
         <application>SalesUI</application>
         <visible>true</visible>
     </applicationVisibilities>
+    <classAccesses>
+        <apexClass>AmwajSalesApi</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <description>Opens the SalesUI sales workspace and its server API (AmwajSalesApi only). Record and field access still come from the user's sales permission sets and sharing.</description>
     <hasActivationRequired>false</hasActivationRequired>
     <label>SalesUI Access</label>
     <userPermissions>

@@ -268,6 +268,24 @@ private class AmwajSalesApiTest {
         Test.stopTest();
     }
 
+    /**
+     * REST calls in these tests bypass the Apex class-access check, so assert the
+     * grant itself: sales users reach AmwajSalesApi only through SalesUI_Access.
+     */
+    @IsTest
+    static void salesUiAccessGrantsTheApiClass() {
+        Assert.areEqual(
+            1,
+            [
+                SELECT COUNT()
+                FROM SetupEntityAccess
+                WHERE Parent.Name = 'SalesUI_Access'
+                    AND SetupEntityId IN (SELECT Id FROM ApexClass WHERE Name = 'AmwajSalesApi')
+            ],
+            'SalesUI_Access must grant the AmwajSalesApi class'
+        );
+    }
+
     @IsTest
     static void pathParsing() {
         Assert.areEqual(
