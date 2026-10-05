@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>66.0</apiVersion>
+    <isExposed>true</isExposed>
+    <masterLabel>Amwaj Payment Plan Viewer</masterLabel>
+    <description>Unit's payment plans with computed per-unit amounts (pre/post-handover). Flow outputs: selectedPlanId, selectedPriceListItemId, computedNetPrice (text), chosenAction (PayEOI|ReserveDirect).</description>
+    <targets>
+        <target>lightning__RecordPage</target>
+        <target>lightning__FlowScreen</target>
+    </targets>
+    <targetConfigs>
+        <targetConfig targets="lightning__RecordPage">
+            <objects>
+                <object>Inventory__c</object>
+            </objects>
+            <supportedFormFactors>
+                <supportedFormFactor type="Small"/>
+                <supportedFormFactor type="Large"/>
+            </supportedFormFactors>
+        </targetConfig>
+        <targetConfig targets="lightning__FlowScreen">
+            <property name="unitId" type="String" label="Unit (Inventory) Id" role="inputOnly"
+                      description="Id of the Inventory__c unit whose payment plans to show."/>
+            <property name="preselectedPlanId" type="String" label="Pre-selected Payment Plan Id" role="inputOnly"
+                      description="Optional. Opens with this plan already chosen (e.g. the plan on the EOI), if it is still offered for the unit."/>
+            <property name="requirePlanSelection" type="Boolean" label="Require a plan to be selected" role="inputOnly"
+                      description="When checked, the user cannot press Next/Finish until a payment plan is selected."/>
+            <property name="selectedPlanId" type="String" label="Selected Payment Plan Id" role="outputOnly"/>
+            <property name="selectedPriceListItemId" type="String" label="Selected Price List Item Id" role="outputOnly"/>
+            <property name="computedNetPrice" type="String" label="Computed Net Price (text)" role="outputOnly"
+                      description="Effective price of the selected plan as text; convert in the flow with VALUE()."/>
+            <property name="chosenAction" type="String" label="Chosen Action" role="outputOnly"
+                      description="'PayEOI' or 'ReserveDirect' — set when the user presses an action button."/>
+        </targetConfig>
+    </targetConfigs>
+</LightningComponentBundle>

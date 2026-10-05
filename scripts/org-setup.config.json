@@ -1,0 +1,9 @@
+{
+  "permsetAssignments": {
+    "assignments": {
+      "SalesUI_Access": {
+        "assignee": "currentUser"
+      }
+    }
+  }
+}

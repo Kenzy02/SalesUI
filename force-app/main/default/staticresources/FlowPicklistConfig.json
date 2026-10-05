@@ -1,0 +1,53 @@
+[ {
+  "picklistValues" : [ {
+    "useIcon" : "true",
+    "optionValue" : "Advertisement",
+    "optionLabel" : "Advertisement",
+    "imageUrl" : "https://v1.lightningdesignsystem.com/assets/images/logo.svg",
+    "iconName" : "action:announcement"
+  }, {
+    "useIcon" : "false",
+    "optionValue" : "Google AdWords",
+    "optionLabel" : "Google AdWords",
+    "imageUrl" : "https://xperience1st8--c.vf.force.com/resource/1789144887000/GoogleLogo?",
+    "iconName" : "https://xperience1st8--c.vf.force.com/resource/1789144761000/MetaLogo?"
+  }, {
+    "useIcon" : "true",
+    "optionValue" : "Website",
+    "optionLabel" : "Website",
+    "imageUrl" : "https://v1.lightningdesignsystem.com/assets/images/logo.svg",
+    "iconName" : "action:web_link"
+  }, {
+    "useIcon" : "true",
+    "optionValue" : "Walk-in",
+    "optionLabel" : "Sales Office",
+    "imageUrl" : "https://v1.lightningdesignsystem.com/assets/images/logo.svg",
+    "iconName" : "utility:trail"
+  }, {
+    "useIcon" : "true",
+    "optionValue" : "Call Centre",
+    "optionLabel" : "Call Centre",
+    "imageUrl" : "https://v1.lightningdesignsystem.com/assets/images/logo.svg",
+    "iconName" : "standard:voice_call"
+  }, {
+    "useIcon" : "false",
+    "optionValue" : "Social Media",
+    "optionLabel" : "Social Media",
+    "imageUrl" : "https://xperience1st8--c.vf.force.com/resource/1789144761000/MetaLogo?",
+    "iconName" : "standard:default"
+  }, {
+    "useIcon" : "false",
+    "optionValue" : "Existing Customer",
+    "optionLabel" : "Existing Customer",
+    "imageUrl" : "https://xperience1st8--c.vf.force.com/resource/1789145578000/ExistingCustomer?",
+    "iconName" : "standard:customers"
+  }, {
+    "useIcon" : "false",
+    "optionValue" : "Other",
+    "optionLabel" : "Other",
+    "imageUrl" : "https://xperience1st8--c.vf.force.com/resource/1789145671000/Other?",
+    "iconName" : "standard:default"
+  } ],
+  "objectName" : "Lead",
+  "fieldName" : "LeadSource"
+} ]

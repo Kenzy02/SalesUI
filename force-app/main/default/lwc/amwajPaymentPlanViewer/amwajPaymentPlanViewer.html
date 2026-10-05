@@ -1,0 +1,249 @@
+<template>
+    <div dir={i18nDir} class="viewer-root">
+
+        <!-- loading -->
+        <template lwc:if={isLoading}>
+            <div class="slds-var-p-around_medium slds-align_absolute-center">
+                <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
+            </div>
+        </template>
+
+        <!-- error -->
+        <template lwc:elseif={hasError}>
+            <div class="slds-box slds-theme_shade slds-var-m-bottom_small" role="alert">
+                <h2 class="slds-text-heading_small slds-var-m-bottom_x-small">{lbl.errorTitle}</h2>
+                <p class="slds-text-body_regular slds-var-m-bottom_small">{error}</p>
+                <lightning-button label={lbl.retry} onclick={handleRefresh} variant="brand">
+                </lightning-button>
+            </div>
+        </template>
+
+        <template lwc:elseif={hasData}>
+
+            <!-- ======================= STAGE 1: COMPARE ======================= -->
+            <template lwc:if={isCompareMode}>
+                <header class="unit-header slds-var-m-bottom_small">
+                    <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-wrap">
+                        <div>
+                            <h2 class="slds-text-heading_small">{lbl.title}</h2>
+                            <p class="slds-text-body_small slds-text-color_weak">{unitTitle}</p>
+                        </div>
+                        <div class="slds-text-align_end">
+                            <template lwc:if={unitPriceFormatted}>
+                                <p class="hero-price">{unitPriceFormatted}</p>
+                                <p class="slds-text-body_small slds-text-color_weak">{lbl.listPrice}</p>
+                            </template>
+                        </div>
+                    </div>
+                    <template lwc:if={hasNoPrice}>
+                        <div class="slds-scoped-notification slds-media slds-media_center slds-theme_info slds-var-m-top_x-small" role="status">
+                            <div class="slds-media__body"><p>{lbl.noPrice}</p></div>
+                        </div>
+                    </template>
+                    <template lwc:if={showMultiplePriceWarning}>
+                        <div class="slds-scoped-notification slds-media slds-media_center slds-theme_warning slds-var-m-top_x-small" role="status">
+                            <div class="slds-media__body"><p>{lbl.multiplePrices}</p></div>
+                        </div>
+                    </template>
+                </header>
+
+                <template lwc:if={isEmpty}>
+                    <div class="slds-illustration slds-illustration_small slds-var-p-around_medium">
+                        <p class="slds-text-body_regular slds-text-align_center">{emptyMessage}</p>
+                    </div>
+                </template>
+
+                <template lwc:else>
+                    <h3 class="choose-head slds-text-title_caps">{lbl.choosePlan}</h3>
+                    <div class="offer-grid">
+                        <template for:each={comparePlans} for:item="plan">
+                            <article key={plan.id} class="offer-card">
+                                <div class="offer-badge"><span class={plan.badgeClass}>{plan.badgeLabel}</span></div>
+                                <h4 class="offer-name">{plan.displayName}</h4>
+
+                                <template lwc:if={plan.priceFormatted}>
+                                    <p class="offer-price">{plan.priceFormatted}</p>
+                                </template>
+                                <template lwc:if={plan.saveLabel}>
+                                    <p class="offer-save">{plan.saveLabel}</p>
+                                </template>
+
+                                <div class="chip-strip slds-var-m-top_x-small">
+                                    <template for:each={plan.chips} for:item="chip">
+                                        <span key={chip.k} class="slds-badge chip">{chip.label}</span>
+                                    </template>
+                                    <span class="slds-badge chip">{plan.installmentsLabel}</span>
+                                </div>
+
+                                <template lwc:if={plan.split}>
+                                    <div class="split-wrap slds-var-m-top_small">
+                                        <div class="split-bar" role="img" aria-label={plan.split.label}>
+                                            <span class="split-pre" style={plan.split.preStyle}></span>
+                                            <template lwc:if={plan.split.hasPost}>
+                                                <span class="split-post" style={plan.split.postStyle}></span>
+                                            </template>
+                                        </div>
+                                        <p class="split-label">{plan.split.label}</p>
+                                    </div>
+                                </template>
+
+                                <template lwc:if={plan.hasWarns}>
+                                    <div class="chip-strip slds-var-m-top_x-small">
+                                        <template for:each={plan.warns} for:item="warn">
+                                            <span key={warn.k} class={warn.cls}>{warn.label}</span>
+                                        </template>
+                                    </div>
+                                </template>
+
+                                <template lwc:if={plan.isMisconfigured}>
+                                    <p class="offer-misconfig slds-var-m-top_x-small">⚠ {lbl.misconfigured}</p>
+                                </template>
+
+                                <button type="button"
+                                        class="slds-button slds-button_brand slds-button_stretch view-plan-btn"
+                                        data-plan-id={plan.id}
+                                        onclick={handleOpenPlan}>
+                                    {lbl.viewPlan}
+                                </button>
+                            </article>
+                        </template>
+                    </div>
+                </template>
+            </template>
+
+            <!-- ======================= STAGE 2: FOCUSED ======================= -->
+            <template lwc:elseif={focusedPlan}>
+                <div class="focus-head">
+                    <div class="focus-nav">
+                        <button type="button" class="slds-button slds-button_neutral back-btn"
+                                onclick={handleBackToCompare}>
+                            ‹ {allPlansLabel}
+                        </button>
+                        <lightning-button-icon icon-name="utility:refresh"
+                            alternative-text={lbl.refresh} title={lbl.refresh}
+                            variant="bare" onclick={handleRefresh}>
+                        </lightning-button-icon>
+                    </div>
+                    <template lwc:if={showPills}>
+                        <div class="pill-row" role="tablist">
+                            <template for:each={switchPills} for:item="pill">
+                                <button key={pill.id} type="button" class={pill.cls}
+                                        role="tab" aria-selected={pill.current}
+                                        title={pill.title}
+                                        data-plan-id={pill.id}
+                                        onclick={handleSwitchPlan}>
+                                    {pill.label}
+                                </button>
+                            </template>
+                        </div>
+                    </template>
+
+                    <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-end slds-wrap">
+                        <div>
+                            <h3 class="focus-name">{focusedPlan.displayName}</h3>
+                            <span class={focusedPlan.badgeClass}>{focusedPlan.badgeLabel}</span>
+                        </div>
+                        <div class="slds-text-align_end">
+                            <template lwc:if={focusedPlan.priceFormatted}>
+                                <p class="hero-price">{focusedPlan.priceFormatted}</p>
+                            </template>
+                            <template lwc:if={focusedPlan.saveLabel}>
+                                <p class="offer-save">{focusedPlan.saveLabel}</p>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="chip-strip slds-var-m-top_x-small">
+                        <template for:each={focusedPlan.chips} for:item="chip">
+                            <span key={chip.k} class="slds-badge chip">{chip.label}</span>
+                        </template>
+                        <span class="slds-badge chip">{focusedPlan.installmentsLabel}</span>
+                        <template for:each={focusedPlan.warns} for:item="warn">
+                            <span key={warn.k} class={warn.cls}>{warn.label}</span>
+                        </template>
+                    </div>
+                    <template lwc:if={focusedPlan.split}>
+                        <div class="split-wrap slds-var-m-top_x-small">
+                            <div class="split-bar" role="img" aria-label={focusedPlan.split.label}>
+                                <span class="split-pre" style={focusedPlan.split.preStyle}></span>
+                                <template lwc:if={focusedPlan.split.hasPost}>
+                                    <span class="split-post" style={focusedPlan.split.postStyle}></span>
+                                </template>
+                            </div>
+                            <p class="split-label">{focusedPlan.split.label}</p>
+                        </div>
+                    </template>
+                </div>
+
+                <template lwc:if={focusedPlan.isMisconfigured}>
+                    <div class="slds-scoped-notification slds-media slds-media_center slds-theme_error slds-var-m-top_small" role="alert">
+                        <div class="slds-media__body">
+                            <p>{lbl.misconfigured}</p>
+                            <p class="slds-text-body_small">{focusedPlan.misconfiguredReason}</p>
+                        </div>
+                    </div>
+                </template>
+
+                <template lwc:if={focusedPlan.hasRows}>
+                    <section class="sched slds-var-m-top_small">
+                        <div class="group-head slds-grid slds-grid_align-spread">
+                            <h4 class="slds-text-title_caps">{lbl.beforeHandover}</h4>
+                            <template lwc:if={focusedPlan.preSubtotal}>
+                                <span class="group-sum">{focusedPlan.preSubtotal}</span>
+                            </template>
+                        </div>
+                        <template for:each={focusedPlan.preRows} for:item="row">
+                            <div key={row.key} class="row-item slds-grid slds-grid_align-spread">
+                                <div class="row-main slds-grid slds-grid_vertical-align-center">
+                                    <span class="seq-circle">{row.seq}</span>
+                                    <div>
+                                        <p class="row-label">{row.displayLabel}
+                                            <template lwc:if={row.refundableLabel}>
+                                                <span class="slds-badge chip slds-var-m-left_xx-small">{row.refundableLabel}</span>
+                                            </template>
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="row-figures slds-text-align_end">
+                                    <p class="row-amount">{row.amountFormatted}</p>
+                                    <p class="row-sub">{row.pctFormatted}</p>
+                                </div>
+                            </div>
+                        </template>
+
+                        <template lwc:if={focusedPlan.hasPostRows}>
+                            <div class="group-head group-head_post slds-grid slds-grid_align-spread slds-var-m-top_small">
+                                <h4 class="slds-text-title_caps">{lbl.afterHandover}</h4>
+                                <template lwc:if={focusedPlan.postSubtotal}>
+                                    <span class="group-sum">{focusedPlan.postSubtotal}</span>
+                                </template>
+                            </div>
+                            <template for:each={focusedPlan.postRows} for:item="row">
+                                <div key={row.key} class="row-item row-item_post slds-grid slds-grid_align-spread">
+                                    <div class="row-main slds-grid slds-grid_vertical-align-center">
+                                        <span class="seq-circle seq-circle_post">{row.seq}</span>
+                                        <div>
+                                            <p class="row-label">{row.displayLabel}</p>
+                                        </div>
+                                    </div>
+                                    <div class="row-figures slds-text-align_end">
+                                        <p class="row-amount">{row.amountFormatted}</p>
+                                        <p class="row-sub">{row.pctFormatted}</p>
+                                    </div>
+                                </div>
+                            </template>
+                        </template>
+
+                        <template lwc:if={focusedPlan.totalFormatted}>
+                            <div class="total-line slds-grid slds-grid_align-spread slds-var-m-top_small">
+                                <span class="slds-text-heading_small">{lbl.total}</span>
+                                <span class="slds-text-heading_small">{focusedPlan.totalFormatted}</span>
+                            </div>
+                        </template>
+                    </section>
+                </template>
+
+            </template>
+        </template>
+    </div>
+</template>
