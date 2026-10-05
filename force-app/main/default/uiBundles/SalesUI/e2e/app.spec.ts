@@ -1,17 +1,21 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('base-react-app', () => {
-  test('home page loads and shows welcome content', async ({ page }) => {
+// Runs against the static build without a Salesforce session: checks the shell,
+// navigation and the honest "can't reach Salesforce" state. Data journeys are
+// verified against an org (see docs/SALES_WORKSPACE.md).
+test.describe('Amwaj sales workspace shell', () => {
+  test('shows branded navigation', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
-    await expect(
-      page.getByText('Welcome to your React application.')
-    ).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Amwaj International' })).toBeVisible();
+    const nav = page.getByRole('navigation', { name: 'Main' });
+    for (const label of ['Overview', 'My leads', 'Customers', 'Units', 'EOIs & holds', 'My commission']) {
+      await expect(nav.getByRole('link', { name: label })).toBeVisible();
+    }
   });
 
-  test('not found route shows 404', async ({ page }) => {
-    await page.goto('/non-existent-route');
-    await expect(page.getByRole('heading', { name: '404' })).toBeVisible();
-    await expect(page.getByText('Page not found')).toBeVisible();
+  test('explains when Salesforce is unreachable instead of showing sample data', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('alert')).toContainText("We couldn't load this");
+    await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
   });
 });

@@ -14,7 +14,7 @@ import { Toaster as Sonner } from 'sonner';
  * toast.warning("Please review");
  */
 export function Toaster() {
-  return <Sonner position="top-right" richColors />;
+  return <Sonner position="bottom-right" richColors closeButton />;
 }
 
 export { toast } from 'sonner';

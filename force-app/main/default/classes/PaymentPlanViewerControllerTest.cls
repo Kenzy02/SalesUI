@@ -422,6 +422,20 @@ private class PaymentPlanViewerControllerTest {
     }
 
     @IsTest
+    static void price_list_without_start_date_is_effective() {
+        PriceList__c pl = [SELECT Id FROM PriceList__c WHERE Name = 'Viewer Test Price List'];
+        pl.EffectiveFrom__c = null;
+        update pl;
+
+        Test.startTest();
+        PaymentPlanViewerController.ViewerDTO dto = PaymentPlanViewerController.getPaymentPlans(theUnit().Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, dto.price, 'A blank Effective From must not hide the price');
+        System.assertEquals(400000, dto.price.listPrice, 'Unit list price');
+    }
+
+    @IsTest
     static void blank_unit_id_throws() {
         Boolean threw = false;
         try {

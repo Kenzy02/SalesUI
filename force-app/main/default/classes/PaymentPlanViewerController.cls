@@ -67,6 +67,7 @@ public with sharing class PaymentPlanViewerController {
         dto.generatedOn = Date.today();
 
         // 2. The unit's active price (latest active price list in its window).
+        //    A blank Effective From means "effective now", as for payment plans below.
         List<PriceListItem__c> priceItems = [
             SELECT Id, List_Price_2__c
             FROM PriceListItem__c
@@ -75,10 +76,11 @@ public with sharing class PaymentPlanViewerController {
                 AND IsActive__c = TRUE
                 AND PriceList__r.IsActive__c = TRUE
                 AND PriceList__r.Project__c = :unit.Project__c
-                AND PriceList__r.EffectiveFrom__c <= TODAY
+                AND (PriceList__r.EffectiveFrom__c = NULL
+                OR PriceList__r.EffectiveFrom__c <= TODAY)
                 AND (PriceList__r.EffectiveTo__c = NULL
                 OR PriceList__r.EffectiveTo__c >= TODAY)
-            ORDER BY PriceList__r.EffectiveFrom__c DESC, CreatedDate DESC
+            ORDER BY PriceList__r.EffectiveFrom__c DESC NULLS LAST, CreatedDate DESC
         ];
         PriceListItem__c pli = priceItems.isEmpty() ? null : priceItems[0];
         if (pli != null) {

@@ -1,39 +1,35 @@
 import type { RouteObject } from 'react-router';
 import AppLayout from './appLayout';
-import Home from './pages/Home';
+import OverviewPage from './pages/OverviewPage';
+import LeadsPage from './pages/LeadsPage';
+import LeadDetailPage from './pages/LeadDetailPage';
+import CustomersPage from './pages/CustomersPage';
+import CustomerDetailPage from './pages/CustomerDetailPage';
+import UnitsPage from './pages/UnitsPage';
+import UnitDetailPage from './pages/UnitDetailPage';
+import EoisPage from './pages/EoisPage';
+import NewEoiPage from './pages/NewEoiPage';
+import EoiDetailPage from './pages/EoiDetailPage';
+import CommissionPage from './pages/CommissionPage';
 import NotFound from './pages/NotFound';
-import { Search as GlobalSearch, config } from "./features/search";
-import AccountObjectDetail from "./pages/AccountObjectDetailPage";
 
 export const routes: RouteObject[] = [
   {
-    path: "/",
+    path: '/',
     element: <AppLayout />,
     children: [
-      {
-        index: true,
-        element: <Home />,
-        handle: { showInNavigation: true, label: "Home" }
-      },
-      {
-        path: "search",
-        element: (
-					<GlobalSearch
-						config={config}
-						title="Search"
-						searchPlaceholder="Search accounts, contacts, opportunities, and content..."
-					/>
-				),
-        handle: { showInNavigation: true, label: "Search" }
-      },
-      {
-        path: "accounts/:recordId",
-        element: <AccountObjectDetail />
-      },
-      {
-        path: '*',
-        element: <NotFound />
-      }
-    ]
-  }
+      { index: true, element: <OverviewPage /> },
+      { path: 'leads', element: <LeadsPage /> },
+      { path: 'leads/:id', element: <LeadDetailPage /> },
+      { path: 'customers', element: <CustomersPage /> },
+      { path: 'customers/:id', element: <CustomerDetailPage /> },
+      { path: 'units', element: <UnitsPage /> },
+      { path: 'units/:id', element: <UnitDetailPage /> },
+      { path: 'eois', element: <EoisPage /> },
+      { path: 'eois/new', element: <NewEoiPage /> },
+      { path: 'eois/:id', element: <EoiDetailPage /> },
+      { path: 'commission', element: <CommissionPage /> },
+      { path: '*', element: <NotFound /> },
+    ],
+  },
 ];

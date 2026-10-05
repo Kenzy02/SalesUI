@@ -62,6 +62,11 @@ public with sharing class AmwajCommissionService {
         public Decimal eligibleBasis = 0;
         public Decimal awaitingSignatureBasis = 0;
         public Decimal commission = 0;
+        /** Commission split by collection type, for display; the total above is the sum of the per-EOI amounts. */
+        public Decimal propertyCommission = 0;
+        public Decimal bookingFeeCommission = 0;
+        public Decimal taxCommission = 0;
+        public Decimal refundCommission = 0;
         public List<Line> lines = new List<Line>();
 
         public Map<String, Object> summary() {
@@ -103,6 +108,10 @@ public with sharing class AmwajCommissionService {
             result.awaitingSignatureBasis += line.signed ? 0.0 : line.netCollected;
             result.commission += line.commission;
         }
+        result.propertyCommission = commissionOn(result.propertyPayments, result.ratePct);
+        result.bookingFeeCommission = commissionOn(result.bookingFees, result.ratePct);
+        result.taxCommission = commissionOn(result.tax, result.ratePct);
+        result.refundCommission = commissionOn(result.refunds, result.ratePct);
         return result;
     }
 
@@ -155,8 +164,12 @@ public with sharing class AmwajCommissionService {
             line.state = 'ELIGIBLE';
         }
         line.eligibleBasis = line.signed ? line.netCollected : 0.0;
-        line.commission = ratePct == null ? 0.0 : (line.eligibleBasis * ratePct / 100).setScale(2, System.RoundingMode.HALF_UP);
+        line.commission = commissionOn(line.eligibleBasis, ratePct);
         return line;
+    }
+
+    private static Decimal commissionOn(Decimal amount, Decimal ratePct) {
+        return ratePct == null ? 0.0 : (amount * ratePct / 100).setScale(2, System.RoundingMode.HALF_UP);
     }
 
     /** Commission rate in percent (1 = 1%), configured by admins in custom metadata. */

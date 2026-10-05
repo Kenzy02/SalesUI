@@ -8,7 +8,10 @@
   }
 
   body {
-    @apply antialiased bg-white;
+    @apply antialiased;
+    font-family:
+      'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-feature-settings: 'tnum' 1;
   }
 }
 
@@ -57,38 +60,42 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  /* Amwaj brand: navy and steel blue from the Amwaj International logo, on a warm neutral. */
+  --brand-navy: #1f2a5c;
+  --brand-steel: #4a78a8;
+  --brand-mist: #eef2f8;
+  --radius: 0.75rem;
+  --background: #f7f6f3;
+  --foreground: #1b2033;
+  --card: #ffffff;
+  --card-foreground: #1b2033;
+  --popover: #ffffff;
+  --popover-foreground: #1b2033;
+  --primary: #1f2a5c;
+  --primary-foreground: #ffffff;
+  --secondary: #eef2f8;
+  --secondary-foreground: #1f2a5c;
+  --muted: #f1f0ec;
+  --muted-foreground: #5d6275;
+  --accent: #eef2f8;
+  --accent-foreground: #1f2a5c;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --border: #e4e2dc;
+  --input: #d9d7d0;
+  --ring: #4a78a8;
+  --chart-1: #1f2a5c;
+  --chart-2: #4a78a8;
+  --chart-3: #8fb0d3;
+  --chart-4: #c9a96b;
+  --chart-5: #6b7a8f;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1b2033;
+  --sidebar-primary: #1f2a5c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef2f8;
+  --sidebar-accent-foreground: #1f2a5c;
+  --sidebar-border: #e4e2dc;
+  --sidebar-ring: #4a78a8;
 }
 
 .dark {
@@ -131,5 +138,20 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@theme inline {
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-steel: var(--brand-steel);
+  --color-brand-mist: var(--brand-mist);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
