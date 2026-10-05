@@ -8,7 +8,7 @@
         <apexClass>AmwajSalesApi</apexClass>
         <enabled>true</enabled>
     </classAccesses>
-    <description>Opens the SalesUI sales workspace and its server API (AmwajSalesApi only), and the Task fields needed to log calls and follow-ups on leads and deals (Salesforce applies the shared activity fields to Event too). Record and field access still come from the user's sales permission sets and sharing.</description>
+    <description>SalesUI sales workspace: app, AmwajSalesApi class, and Task fields for calls and follow-ups. Record and field access come from the user's sales permission sets and sharing.</description>
     <fieldPermissions>
         <editable>true</editable>
         <field>Event.Description</field>
