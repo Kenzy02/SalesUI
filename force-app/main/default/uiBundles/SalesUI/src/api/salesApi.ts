@@ -9,6 +9,10 @@
 import { createDataSDK } from '@salesforce/platform-sdk';
 import type {
   Commission,
+  ConversionResult,
+  ConversionReview,
+  ConvertInput,
+  CustomerMatch,
   DealDetail,
   DealRow,
   EoiCreated,
@@ -116,6 +120,14 @@ export const salesApi = {
   lead: (id: string) => request<LeadDetail>('GET', `/leads/${enc(id)}`),
   updateLead: (id: string, changes: { status?: string; rating?: string; description?: string }) =>
     request<LeadDetail>('PATCH', `/leads/${enc(id)}`, changes),
+  /** Review for converting the lead, or the resulting customer and deal if it is already converted. */
+  conversion: (id: string) => request<ConversionReview | ConversionResult>('GET', `/leads/${enc(id)}/conversion`),
+  conversionMatches: (id: string, mobile?: string, nationalId?: string) =>
+    request<{ matches: CustomerMatch[]; duplicateLeads: ConversionReview['duplicateLeads'] }>('POST', `/leads/${enc(id)}/matches`, {
+      mobile,
+      nationalId,
+    }),
+  convertLead: (id: string, input: ConvertInput) => request<ConversionResult>('POST', `/leads/${enc(id)}/convert`, input),
 
   addActivity: (
     parent: 'leads' | 'deals',

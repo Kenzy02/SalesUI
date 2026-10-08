@@ -82,6 +82,8 @@ export interface LeadDetail extends LeadRow {
   brokerName?: string;
   ownerName?: string;
   isConverted?: boolean;
+  convertedAccountId?: string;
+  convertedDealId?: string;
   isMine: boolean;
   canEdit: boolean;
   canEditStatus: boolean;
@@ -318,6 +320,8 @@ export interface Pricing {
 export interface UnitDetail extends UnitRow {
   media: FileRef[];
   pricing: Pricing;
+  /** Booking (reservation) fee the org's EOI process charges for this unit's list price. */
+  bookingFee?: number;
   myHold?: { id: string; name?: string; status?: string; expiryDate?: string };
 }
 
@@ -429,6 +433,8 @@ export interface OfferInput {
   paymentMethod: string;
   notes?: string;
   customer: CustomerInput;
+  /** The list price the rep reviewed; Salesforce refuses the request if the price has changed. */
+  expectedListPrice?: number;
 }
 
 export interface EoiCreated {
@@ -440,9 +446,85 @@ export interface EoiCreated {
   discountPct?: number;
   reservationFee?: number;
   netUnitPrice?: number;
+  paymentMethod?: string;
+  unitId?: string;
   unitName?: string;
   unitStatus?: string;
+  projectName?: string;
+  paymentPlanId?: string;
+  paymentPlanName?: string;
+  customerId?: string;
+  customerName?: string;
+  dealId?: string;
+  dealName?: string;
+  /** Lightning record page of the EOI in Salesforce. */
+  recordUrl?: string;
+  nextStep?: EoiNextStep;
   replayed: boolean;
+}
+
+/** An existing customer found by the org's duplicate check (mobile, phone or national ID). */
+export interface CustomerMatch {
+  id: string;
+  name?: string;
+  mobile?: string;
+  ownerName?: string;
+  nationalIdEnding?: string;
+  matchedOn: ('mobile' | 'phone' | 'national ID')[];
+  /** The lead is linked to this buyer (Lead.Buyer__c); the org requires converting into it. */
+  isLinkedBuyer: boolean;
+  /** Mobile and national ID are unique per customer, so a new customer with them would be refused. */
+  blocksNewCustomer: boolean;
+  canUse: boolean;
+  openDeals: { id: string; name?: string; stage?: string; projectName?: string; ownerName?: string; hasEoi?: boolean; canUse: boolean }[];
+}
+
+/** Result of converting a lead, or of resolving a lead that was already converted. */
+export interface ConversionResult {
+  leadId: string;
+  converted: true;
+  replayed: boolean;
+  accountId?: string;
+  customerName?: string;
+  dealId?: string;
+  dealName?: string;
+  dealProject?: string;
+  dealIsClosed?: boolean;
+  dealHasEoi?: boolean;
+  /** The deal is open, has no EOI and the user can edit it. */
+  canContinue?: boolean;
+  createdCustomer?: boolean;
+  createdDeal?: boolean;
+}
+
+export interface ConversionReview {
+  leadId: string;
+  converted: false;
+  firstName?: string;
+  lastName?: string;
+  mobile?: string;
+  email?: string;
+  nationalId?: string;
+  company?: string;
+  projectInterest?: string;
+  interestedUnit?: string;
+  linkedBuyerId?: string;
+  convertedStatus: string;
+  blockers: string[];
+  canConvert: boolean;
+  canEditNationalId: boolean;
+  matches: CustomerMatch[];
+  duplicateLeads: { id: string; name?: string; status?: string; ownerName?: string }[];
+}
+
+export interface ConvertInput {
+  firstName?: string;
+  lastName: string;
+  mobile: string;
+  email?: string;
+  nationalId?: string;
+  accountId?: string;
+  dealId?: string;
 }
 
 export interface ReservationInput {

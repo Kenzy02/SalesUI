@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { CheckCircle2, Handshake, Hourglass, Search, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, ExternalLink, Handshake, Hourglass, Search, ShieldCheck, UserCheck } from 'lucide-react';
 import { ApiError, salesApi } from '@/api/salesApi';
-import type { CustomerDetails, CustomerInput, DealRow, EoiCreated, UnitDetail } from '@/api/salesTypes';
+import type { CustomerDetails, CustomerInput, DealDetail, DealRow, EoiCreated, UnitDetail } from '@/api/salesTypes';
+import { BookingSteps } from '@/components/app/BookingSteps';
 import { useMe } from '@/components/app/MeContext';
 import { FormField, NativeSelect, TextArea, TextInput } from '@/components/app/FormControls';
 import { PaymentPlanList } from '@/components/app/PaymentPlans';
@@ -10,8 +11,9 @@ import { BackLink, EmptyState, ErrorState, InlineError, LoadingBlock, PageHeader
 import { UnitPhoto } from '@/components/app/UnitPhoto';
 import { Button } from '@/components/ui/button';
 import { useApi } from '@/hooks/useApi';
+import { journeyQuery } from '@/lib/booking';
 import { area, date, money, percent } from '@/lib/format';
-import { unitStatus } from '@/lib/salesLabels';
+import { EOI_STATUS, EOI_STEP, unitStatus } from '@/lib/salesLabels';
 import { cn } from '@/lib/utils';
 
 /** EOI__c.Payment_Method__c values in the org (the server re-validates them). */
@@ -70,6 +72,10 @@ export default function NewEoiPage() {
   const [params, setParams] = useSearchParams();
   const dealId = params.get('dealId') ?? '';
   const unitId = params.get('unitId') ?? '';
+  // Arrived straight from converting a lead in the app.
+  const fromConversion = params.get('converted') === '1';
+  // The plan the rep chose on the unit page; read once, then the form owns the choice.
+  const requestedPlan = useRef(params.get('planId'));
 
   const deals = useApi(() => salesApi.deals(), []);
   const deal = useApi(() => (dealId ? salesApi.deal(dealId) : Promise.resolve(null)), [dealId]);
@@ -92,12 +98,18 @@ export default function NewEoiPage() {
     if (deal.data) setCustomer(customerFrom(deal.data.customer));
   }, [deal.data]);
 
-  // Pre-select the only (or first valid) eligible plan for the chosen unit.
+  // Pre-select the plan chosen on the unit page, or the only eligible plan.
   const plans = useMemo(() => unit.data?.pricing.plans ?? [], [unit.data]);
   useEffect(() => {
     const usable = plans.filter(p => !p.isMisconfigured);
-    setPlanId(usable.length === 1 ? usable[0].id : '');
+    const wanted = requestedPlan.current;
+    setPlanId(wanted && usable.some(p => p.id === wanted) ? wanted : usable.length === 1 ? usable[0].id : '');
   }, [plans]);
+  const choosePlan = (id: string) => {
+    setPlanId(id);
+    requestedPlan.current = id;
+    set('planId', id);
+  };
 
   const eligibleDeals = (deals.data?.deals ?? []).filter(d => !d.isClosed && !d.eoiCreated);
   const set = (key: string, value: string) => {
@@ -133,6 +145,8 @@ export default function NewEoiPage() {
         discountPct: discountNum,
         paymentMethod,
         notes: notes.trim() || undefined,
+        // Salesforce refuses the request if the price changed after the rep reviewed it.
+        expectedListPrice: unit.data?.pricing.price?.listPrice,
         customer: {
           ...customer,
           residenceId: customer.residenceId?.trim() || undefined,
@@ -142,12 +156,13 @@ export default function NewEoiPage() {
       setCreated(result);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
+      const kept = fromConversion && deal.data ? ` ${deal.data.customerName ?? 'The customer'} and their deal are kept, so you can fix this and try again without converting again.` : '';
       setSubmitError(
-        err instanceof ApiError && err.status === 409
-          ? `${err.message} Nothing was reserved.`
+        (err instanceof ApiError && err.status === 409
+          ? `${err.message} Nothing was held.`
           : err instanceof Error
             ? err.message
-            : 'The EOI could not be created.'
+            : 'The EOI could not be created.') + kept
       );
       if (err instanceof ApiError && err.status === 409) unit.reload();
     } finally {
@@ -156,7 +171,7 @@ export default function NewEoiPage() {
     }
   };
 
-  if (created) return <Created result={created} dealId={dealId} />;
+  if (created) return <Created result={created} withConversion={fromConversion} />;
 
   if (!me.canCreateEoi) {
     return (
@@ -173,10 +188,16 @@ export default function NewEoiPage() {
 
   return (
     <>
-      <BackLink to={dealId ? `/customers/${dealId}` : unitId ? `/units/${unitId}` : '/units'}>Back</BackLink>
+      <BackLink
+        to={unitId ? `/units/${unitId}${journeyQuery(params, { unitId: null, converted: null })}` : dealId ? `/customers/${dealId}` : '/units'}
+      >
+        {unitId ? 'Back to the unit' : 'Back'}
+      </BackLink>
+      {(fromConversion || (dealId && unitId)) && <BookingSteps current="eoi" withConversion={fromConversion} />}
+      {fromConversion && deal.data && <ConvertedBanner deal={deal.data} />}
       <PageHeader
-        eyebrow="New EOI"
-        title="Start an EOI and hold a unit"
+        eyebrow="Booking · EOI"
+        title="Review the offer and hold the unit"
         description={`Creating the EOI holds the unit for ${me.eoiPeriodDays ?? 'the configured number of'} days, as set in Salesforce. A paid EOI can then be reserved for ${me.reservationHoldDays ?? 'the configured number of'} days.`}
       />
 
@@ -190,7 +211,8 @@ export default function NewEoiPage() {
               <ErrorState message={deals.error} onRetry={deals.reload} />
             ) : eligibleDeals.length === 0 && !dealId ? (
               <EmptyState icon={<Handshake className="size-5" />} title="No customer deals ready for an EOI">
-                You need an open deal without an EOI. Convert a qualified lead in Salesforce to create one.
+                You need an open deal without an EOI. Open one of your leads, choose a unit and plan, and continue to booking to
+                convert the lead here.
               </EmptyState>
             ) : (
               <FormField label="Customer deal" required error={showErrors && !dealReady ? 'Choose an open deal without an EOI.' : null}>
@@ -239,7 +261,7 @@ export default function NewEoiPage() {
               <p className="text-sm text-muted-foreground">No payment plan applies to this unit, so it can't be offered yet.</p>
             ) : (
               <div className="space-y-5">
-                <PaymentPlanList plans={plans} currency={me.currencyCode} selectable selectedId={planId} onSelect={setPlanId} />
+                <PaymentPlanList plans={plans} currency={me.currencyCode} selectable selectedId={planId} onSelect={choosePlan} />
                 {showErrors && !planId && <p className="text-sm font-medium text-rose-700">Choose a payment plan.</p>}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <FormField label="Payment method" required>
@@ -291,7 +313,13 @@ export default function NewEoiPage() {
         <div className="lg:col-span-1">
           <div className="lg:sticky lg:top-32">
             <Section title="5. Review and confirm">
-              <Review deal={deal.data ?? null} unit={unit.data ?? null} planName={plans.find(p => p.id === planId)?.name} discount={discountError ? null : discountNum} paymentMethod={paymentMethod} />
+              <Review
+                deal={deal.data ?? null}
+                unit={unit.data ?? null}
+                planName={plans.find(p => p.id === planId)?.name}
+                discount={discountError ? null : discountNum}
+                paymentMethod={paymentMethod}
+              />
               <label className="mt-4 flex items-start gap-2.5 text-sm">
                 <input
                   type="checkbox"
@@ -332,7 +360,7 @@ function Review({
   discount,
   paymentMethod,
 }: {
-  deal: { customerName?: string } | null;
+  deal: { customerName?: string; name?: string } | null;
   unit: UnitDetail | null;
   planName?: string;
   discount: number | null;
@@ -340,8 +368,10 @@ function Review({
 }) {
   const me = useMe();
   const listPrice = unit?.pricing.price?.listPrice;
+  const holdUntil = me.eoiPeriodDays != null ? addDays(me.today, me.eoiPeriodDays) : null;
   const rows: [string, string][] = [
     ['Customer', deal?.customerName ?? '—'],
+    ['Deal', deal?.name ?? '—'],
     ['Unit', unit ? `${unit.name} · ${unit.projectName}` : '—'],
     ['Payment plan', planName ?? '—'],
     ['Payment method', PAYMENT_METHODS.find(m => m.value === paymentMethod)?.label ?? paymentMethod],
@@ -370,22 +400,25 @@ function Review({
             <dt>Net property price</dt>
             <dd>Set by Salesforce</dd>
           </div>
-          <div className="flex justify-between gap-3 text-muted-foreground">
+          <div className="flex justify-between gap-3">
             <dt>Booking (reservation) fee</dt>
-            <dd>Set by Salesforce</dd>
+            <dd className="font-semibold">{money(unit?.bookingFee, me.currencyCode)}</dd>
           </div>
           <div className="flex justify-between gap-3 text-muted-foreground">
             <dt>Tax</dt>
             <dd>Not recorded in Salesforce</dd>
           </div>
         </dl>
-        <p className="mt-2 text-xs text-muted-foreground">Final amounts are shown as soon as Salesforce creates the EOI.</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          The booking fee is 1.5% of the list price, as in Salesforce's EOI process. Salesforce re-checks the price before saving.
+        </p>
       </div>
       <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950">
         <Hourglass className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <span>
-          Unit hold starts today and runs for {me.eoiPeriodDays ?? '—'} days.
-          {discount ? ' With a discount, the hold starts when the discount is approved.' : ''}
+          {discount
+            ? `With a discount, the ${me.eoiPeriodDays ?? '—'}-day hold starts once the discount is approved.`
+            : `The unit is held for ${me.eoiPeriodDays ?? '—'} days${holdUntil ? `, until about ${date(holdUntil)}` : ''}. Salesforce sets the exact date.`}
         </span>
       </div>
     </div>
@@ -562,11 +595,54 @@ function CustomerForm({
   );
 }
 
-function Created({ result, dealId }: { result: EoiCreated; dealId: string }) {
+/** Shown on the EOI form right after the lead was converted in the app. */
+function ConvertedBanner({ deal }: { deal: DealDetail }) {
+  return (
+    <div role="status" className="mb-5 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+      <UserCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <span>
+        Lead converted. Customer <span className="font-semibold">{deal.customerName}</span> and deal{' '}
+        <span className="font-semibold">{deal.name}</span> are saved in Salesforce. Complete the details below to create the EOI.
+      </span>
+    </div>
+  );
+}
+
+function addDays(isoDate: string, days: number): string {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function Created({ result, withConversion }: { result: EoiCreated; withConversion: boolean }) {
   const me = useMe();
   const held = result.unitStatus === 'Held';
+  const status = EOI_STATUS[result.status ?? ''];
+  const step = result.nextStep ? EOI_STEP[result.nextStep] : undefined;
+  const items: [string, ReactNode][] = [
+    ['EOI number', result.name],
+    [
+      'Customer',
+      result.dealId ? (
+        <Link to={`/customers/${result.dealId}`} className="underline decoration-brand-steel/50 underline-offset-2">
+          {result.customerName ?? '—'}
+        </Link>
+      ) : (
+        (result.customerName ?? '—')
+      ),
+    ],
+    ['Deal', result.dealName ?? '—'],
+    ['Unit', [result.unitName, result.projectName].filter(Boolean).join(' · ') || '—'],
+    ['Payment plan', result.paymentPlanName ?? '—'],
+    ['Payment method', PAYMENT_METHODS.find(m => m.value === result.paymentMethod)?.label ?? result.paymentMethod ?? '—'],
+    ['Booking fee', money(result.reservationFee, me.currencyCode)],
+    ['Net property price', money(result.netUnitPrice, me.currencyCode)],
+    ['Discount', percent(result.discountPct)],
+    ['Unit held until', held ? date(result.expiryDate) : `Not held yet (${unitStatus(result.unitStatus).label})`],
+  ];
   return (
     <div className="mx-auto max-w-2xl">
+      <BookingSteps current="done" withConversion={withConversion} />
       <Section>
         <div className="flex flex-col items-center py-4 text-center" role="status">
           <CheckCircle2 className="size-12 text-emerald-600" aria-hidden="true" />
@@ -575,46 +651,45 @@ function Created({ result, dealId }: { result: EoiCreated; dealId: string }) {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {held
-              ? `Unit ${result.unitName} is held for your customer until ${date(result.expiryDate)}.`
+              ? `Unit ${result.unitName} is held for ${result.customerName ?? 'your customer'} until ${date(result.expiryDate)}.`
               : result.approvalStatus === 'Submitted' || (result.discountPct ?? 0) > 0
                 ? `The discount was sent for approval. Unit ${result.unitName} is held once it is approved.`
                 : `Unit ${result.unitName} status: ${unitStatus(result.unitStatus).label}.`}
           </p>
+          <div className="mt-2 flex flex-wrap justify-center gap-2">
+            {status && <StatusPill tone={status.tone}>EOI {status.label}</StatusPill>}
+            {result.approvalStatus && <StatusPill tone="neutral">Approval: {result.approvalStatus}</StatusPill>}
+          </div>
         </div>
         <dl className="mt-2 grid gap-3 rounded-lg bg-muted/60 p-4 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-muted-foreground">Net property price</dt>
-            <dd className="font-semibold">{money(result.netUnitPrice, me.currencyCode)}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Booking (reservation) fee</dt>
-            <dd className="font-semibold">{money(result.reservationFee, me.currencyCode)}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Discount</dt>
-            <dd className="font-semibold">{percent(result.discountPct)}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Hold until</dt>
-            <dd className="font-semibold">{date(result.expiryDate)}</dd>
-          </div>
+          {items.map(([k, v]) => (
+            <div key={k}>
+              <dt className="text-muted-foreground">{k}</dt>
+              <dd className="font-semibold">{v}</dd>
+            </div>
+          ))}
         </dl>
-        <div className="mt-5 text-sm">
-          <p className="font-medium text-brand-navy">Next steps</p>
-          <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
-            <li>Have the customer sign the EOI document and pay the booking fee.</li>
-            <li>The signed EOI is filed on the EOI in Salesforce, and finance confirms the payment.</li>
-            <li>Once the EOI is paid, reserve the unit from the EOIs page.</li>
-          </ol>
-          <p className="mt-3 text-xs text-muted-foreground">No document or email was sent by this app.</p>
-        </div>
+        {step && (
+          <div className="mt-5 rounded-lg border border-border p-4 text-sm">
+            <p className="font-medium text-brand-navy">Next: {step.label}</p>
+            <p className="mt-1 text-muted-foreground">{step.detail}</p>
+            <ol className="mt-3 list-decimal space-y-1 pl-5 text-muted-foreground">
+              <li>Have the customer sign the EOI document and pay the booking fee.</li>
+              <li>The signed EOI is filed on the EOI in Salesforce, and finance confirms the payment.</li>
+              <li>Once the EOI is paid, reserve the unit from the EOI page.</li>
+            </ol>
+            <p className="mt-3 text-xs text-muted-foreground">No document or email was sent by this app.</p>
+          </div>
+        )}
         <div className="mt-6 flex flex-col gap-2 sm:flex-row">
           <Button asChild size="lg" className="flex-1">
             <Link to={`/eois/${result.eoiId}`}>Open the EOI</Link>
           </Button>
-          {dealId && (
+          {result.recordUrl && (
             <Button asChild size="lg" variant="outline" className={cn('flex-1')}>
-              <Link to={`/customers/${dealId}`}>Back to customer</Link>
+              <a href={result.recordUrl} target="_blank" rel="noreferrer">
+                Open in Salesforce <ExternalLink />
+              </a>
             </Button>
           )}
         </div>

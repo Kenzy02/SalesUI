@@ -70,7 +70,9 @@ public with sharing class AmwajSalesReadService {
         'brokerName' => 'Broker__r.Name',
         'ownerName' => 'Owner.Name',
         'ownerId' => 'OwnerId',
-        'isConverted' => 'IsConverted'
+        'isConverted' => 'IsConverted',
+        'convertedAccountId' => 'ConvertedAccountId',
+        'convertedDealId' => 'ConvertedOpportunityId'
     };
 
     /** Lead id -> its earliest open follow-up task the user can see. */
@@ -477,7 +479,9 @@ public with sharing class AmwajSalesReadService {
         List<Map<String, Object>> media = AmwajMediaService.mediaForUnits(rows).get(unitId);
         r.put('media', media == null ? new List<Map<String, Object>>() : media);
         // Pricing and plan eligibility come from the org's existing payment-plan logic.
-        r.put('pricing', PaymentPlanViewerController.getPaymentPlans(unitId));
+        PaymentPlanViewerController.ViewerDTO pricing = PaymentPlanViewerController.getPaymentPlans(unitId);
+        r.put('pricing', pricing);
+        r.put('bookingFee', AmwajOfferService.bookingFee(pricing.price?.listPrice));
         r.put('myHold', myHoldOnUnit(unitId));
         return r;
     }
@@ -586,8 +590,7 @@ public with sharing class AmwajSalesReadService {
      * Where the EOI sits in the org's process (validation rules and flows on
      * EOI__c / Reservation__c), phrased as the next thing that has to happen.
      */
-    @TestVisible
-    private static String eoiNextStep(Map<String, Object> e, List<Map<String, Object>> reservations) {
+    public static String eoiNextStep(Map<String, Object> e, List<Map<String, Object>> reservations) {
         String status = (String) e.get('status');
         String approval = (String) e.get('approvalStatus');
         Decimal discount = (Decimal) e.get('discountPct');

@@ -17,8 +17,13 @@ export interface CustomerContextData {
   /** Unit type of the recorded interested unit; the org stores no other unit-type preference. */
   unitType?: string;
   interestedUnitName?: string;
-  /** Only deals can start an EOI; leads must be converted in Salesforce first. */
+  /**
+   * Whether "Continue to booking" is offered. A deal must be open, without an EOI and
+   * editable; a lead is converted inside the app on the way (it must be editable).
+   */
   canStartEoi: boolean;
+  /** For a lead that is already converted: its deal, so booking continues there. */
+  convertedDealId?: string;
 }
 
 export function contextFromParams(params: URLSearchParams): { dealId?: string; leadId?: string } {
@@ -62,7 +67,8 @@ export function useCustomerContext(params: URLSearchParams) {
         projectName: l.projectInterest,
         unitType: l.interestedUnitType,
         interestedUnitName: l.interestedUnit,
-        canStartEoi: false,
+        canStartEoi: l.canEdit,
+        convertedDealId: l.convertedDealId,
       };
     }
     return null;
@@ -107,7 +113,11 @@ export function CustomerContextBanner({
             {context.interestedUnitName
               ? ` · interested unit ${context.interestedUnitName}${context.unitType ? ` (${context.unitType})` : ''}`
               : ''}
-            {context.kind === 'lead' ? ' · Convert the lead in Salesforce before starting an EOI.' : ''}
+            {context.kind === 'lead'
+              ? context.convertedDealId
+                ? ' · Already converted; booking continues on their deal.'
+                : ' · Choose a unit and plan, then continue to booking to convert the lead here.'
+              : ''}
           </div>
         </div>
       </div>

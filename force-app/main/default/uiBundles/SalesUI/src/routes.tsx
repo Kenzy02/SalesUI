@@ -3,6 +3,7 @@ import AppLayout from './appLayout';
 import OverviewPage from './pages/OverviewPage';
 import LeadsPage from './pages/LeadsPage';
 import LeadDetailPage from './pages/LeadDetailPage';
+import ConvertLeadPage from './pages/ConvertLeadPage';
 import CustomersPage from './pages/CustomersPage';
 import CustomerDetailPage from './pages/CustomerDetailPage';
 import UnitsPage from './pages/UnitsPage';
@@ -21,6 +22,7 @@ export const routes: RouteObject[] = [
       { index: true, element: <OverviewPage /> },
       { path: 'leads', element: <LeadsPage /> },
       { path: 'leads/:id', element: <LeadDetailPage /> },
+      { path: 'leads/:id/convert', element: <ConvertLeadPage /> },
       { path: 'customers', element: <CustomersPage /> },
       { path: 'customers/:id', element: <CustomerDetailPage /> },
       { path: 'units', element: <UnitsPage /> },

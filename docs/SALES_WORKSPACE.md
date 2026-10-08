@@ -31,6 +31,7 @@ FieldPermissions. Reads in the app are `WITH USER_MODE` with field lists filtere
 | Assigned leads, status/notes | Lead R/E, Status/Description edit; sharing (Lead OWD Private) | Lead CRE; Description E; **Rating not readable** | None (Rating hidden for reps) |
 | Customer deals | Opportunity R/E, Account R/E (Opportunity OWD Private) | CRE on both | None |
 | Projects, units, prices, plans | Read on Project, Building, Inventory, PriceList(Item), PaymentPlan(Installment) | Read via `Amwaj_SalesExec_PS` | None |
+| Convert lead (in the app) | `ConvertLeads`; Lead edit on the record; Account, Contact, Opportunity create | `ConvertLeads` on profile and `Amwaj_SalesExec_PS`; Lead E (owner); Account/Contact/Opportunity CRE | None. Conversion runs in **user mode** (see §9) |
 | Create EOI / reservation | Create on EOI / Reservation; edit on the deal | EOI CR, Reservation CR, Opportunity E | None. Writes mirror the org's system-mode flows after a user-mode access check |
 | Calls and follow-ups (Task) | Edit Tasks + read/edit on `Task.WhoId`, `WhatId`, `ActivityDate`, `Description` | Edit Tasks only; **no Task field access** | Read/edit on those 4 fields in `SalesUI_Access`. Salesforce applies the shared fields to Event too (`Event.WhoId/WhatId/Description`) |
 | Signed EOI upload | Edit on `EOI__c` + `EOI_Document_Attached__c` | `EOI__c` **no Edit**; field E (PS) | **None (decision needed)**: object Edit would also let reps change `Discount__c`, `Approval_Status__c`, `Payment_Method__c` and `Preferred_Payment_Plan__c` (editable via the profile), bypassing discount approval |
@@ -112,7 +113,8 @@ was set to Expired after the check (A10 back to Available). Her follow-up task i
    minutes later, so the EOI keeps the checkbox but no file. *Fix:* also link the file to the EOI (ContentDocumentLink) before the
    cleanup, or stop deleting.
 3. **Who files the signed EOI:** reps have no EOI Edit (see matrix). Decide the responsible role.
-4. Data: Iraq Gate has no active payment plan; no lead has been converted; most deals are owned by the admin.
+4. Data: Iraq Gate has no active payment plan; most deals are owned by the admin. Plan *garden 5 payments* totals 100.01% and
+   *Karblaa Gate* 95.5% (§9.3). 51 of 52 leads carry Company "Individual" (handled at conversion, §9.1).
 
 **Application defects found and fixed this round:** missing class grant (§1); Task fields missing for follow-ups; phone overflow on
 New EOI; one failing overview panel could blank the page (panels now load independently); "not shared" records offered a useless
@@ -127,8 +129,8 @@ sf project deploy start -o <alias> \
   --source-dir force-app/main/default/objects/Amwaj_Commission_Policy__mdt \
   --source-dir force-app/main/default/customMetadata \
   --source-dir force-app/main/default/uiBundles/SalesUI \
-  --test-level RunSpecifiedTests --tests AmwajOfferServiceTest --tests AmwajCommissionServiceTest \
-  --tests AmwajSalesApiTest --tests PaymentPlanViewerControllerTest
+  --test-level RunSpecifiedTests --tests AmwajLeadConversionServiceTest --tests AmwajOfferServiceTest \
+  --tests AmwajCommissionServiceTest --tests AmwajSalesApiTest --tests PaymentPlanViewerControllerTest
 # Deploy the permission set separately, after the class exists (deploying it with a brand-new class is what lost the grant):
 sf project deploy start -o <alias> --source-dir force-app/main/default/permissionsets/SalesUI_Access.permissionset-meta.xml
 ```
@@ -141,8 +143,85 @@ Then confirm: `SELECT Parent.Name FROM SetupEntityAccess WHERE SetupEntityId IN 
    recorded interest.
 3. **Filters** – switch to New Kadhimyah Gate: Apartment is cleared because it doesn't exist there. Choose Villa and 4+ bedrooms;
    the count and chips update and pages cover every match. Open a unit; "Back to units" keeps the filters.
-4. **Start EOI for the customer** – required details are checked as the org's flow does. Salesforce returns the fee and the
+4. **Continue to booking** – choose the plan; for a lead, confirm details and convert it here (§9), then the EOI form opens prefilled.
+   **Create the EOI** – required details are checked as the org's flow does. Salesforce returns the fee and the
    3-day hold from settings.
 5. **EOI page** – two-stage hold explained (EOI 3 days, reservation 14 days); finance and filing steps aren't available to reps.
 6. **My commission** – proposed rule labelled as such; tax "not recorded"; payouts "not tracked".
 7. Close with the defects and decisions in §2 and §6.
+
+## 9. Lead to booking inside the app (Oct 2026)
+
+The rep now goes **lead → unit and plan → convert lead → EOI → booked** without leaving the app. The previous instruction
+("Convert the lead in Salesforce … then start the EOI from Customers") is replaced by **Continue to booking**.
+
+### 9.1 The org's conversion setup (inspected, reused)
+
+| Item | What the org has | How the app uses it |
+| --- | --- | --- |
+| Mechanism | Standard lead conversion; no custom convert flow or Apex exists. `Lead.Buyer__c` / `Opportunity.OriginatingLead__c` describe a "guided convert" (RE-GAP-002 / RE-DEC-14) that was never built | `Database.convertLead` in **user mode** (`AmwajLeadConversionService`). No records are imitated and Lead Status is not set by hand |
+| Converted status | `Qualified` (only `IsConverted` status) | Read from `LeadStatus` |
+| Field mappings | Lead Convert Settings: Lead → Account (Channel, Organization), → Contact/person account (national ID and date, residence ID and date, nationality, profession, projects), → Opportunity (Project_Interest → Project, Interested Unit, Broker, Channel, Organization). Opportunity creation optional | Applied by Salesforce. The new deal also gets `OriginatingLead__c` |
+| Person accounts | All 52 customers are person accounts. Native conversion creates a person account **only when Company is blank**; 51 of 52 leads carry the placeholder Company "Individual", which would create a business account named "Individual" (verified with a rolled-back probe) | The placeholder is cleared on the lead in the same transaction, just before conversion. A lead with a real company name is **not** converted here (EOIs need a person account) |
+| Duplicate rules | Standard duplicate rules on Lead/Account/Contact/Person Account are all **inactive** | Not used |
+| Org duplicate check | `Get_Duplicate_Leads_SubFlow` (mobile, phone, national ID), used by Lead Quick Create | Called to list existing-customer matches |
+| Hard uniqueness | `Account.Mobile_Normalized__c` (unique, set by the Account flow: 0770… → +964770…) and `Contact.NationalID__c` (unique) | Matching also uses the canonical mobile; "Create new customer" is disabled when a match has the same mobile or national ID; a database duplicate error is shown as a clear message |
+| Validation rules | `Convert_Must_Use_Linked_Buyer` (a lead with `Buyer__c` must convert into it); Lead/Account mobile format; Account national ID = 12 digits; Reception/Call Centre roles can't change Lead status | Enforced by Salesforce (user mode) and pre-checked in the form. Call Centre/Reception users are refused by the org's rule: a genuine role restriction, not bypassed |
+| Permissions | Reps: `ConvertLeads`, Account/Contact/Opportunity create, Lead edit on own leads (Lead OWD Private, Account OWD Read/Write) | No permission was added |
+
+**One system-mode write:** Salesforce refuses a user-mode lookup to a *converted* lead ("cannot reference converted lead"), even
+though reps may edit `Opportunity.OriginatingLead__c`. That single attribution field is written in system mode on the deal just
+created. Converted leads cannot be edited, so `Buyer__c` is recorded only when converting into an existing customer.
+
+### 9.2 Behaviour
+
+- **Unit page:** with a lead or deal context, the rep chooses the payment plan (pre-selected when only one applies) and clicks
+  **Continue to booking**. Lead, project, unit, plan and all browse filters stay in the URL; "Back" returns to the same list.
+- **Convert step** (`/leads/:id/convert`): confirm name, mobile, email, national ID; see existing-customer matches (reason, owner,
+  open deals) and choose *new customer + new deal*, *existing customer + new deal*, or *existing customer + their open deal*
+  (open, no EOI, editable). Only server-confirmed matches are accepted.
+- **Retries and already-converted leads:** the lead row is locked (`FOR UPDATE`); a converted lead is answered with its customer
+  and deal ("Nothing was converted again"), never reconverted.
+- **EOI step:** opens with customer, deal, unit and plan filled in; shows list price, booking fee (1.5% of list price, from the
+  org's EOI flow), discount rules and the expected hold end date. The request carries the reviewed list price; if Salesforce's
+  price has changed, nothing is created (409).
+- **Partial completion:** if the EOI fails after conversion, the customer and deal stay; the message says so and the rep retries on
+  the same deal. Returning via the lead resolves to that deal.
+- **Confirmation:** EOI number, customer and deal, unit and plan, payment method, booking fee, net price, discount, actual hold
+  expiry, status and approval, next permitted action, and **Open in Salesforce**.
+- **EOI parity fixes:** like the org's EOI screen flow, the deal's `Project__c` is backfilled to the booked unit's project. `EOI.Lead__c`
+  is set from the deal's `OriginatingLead__c` (the EOI create flow otherwise looks it up via `Buyer__c`, which new conversions
+  cannot set).
+- **EOI remains the right record** for the initial offer/hold: EOI holds the unit (`EOI_Period_Days__c` = 3), Reservation still requires
+  a Paid EOI. No Offer object was introduced and no prerequisite was bypassed.
+
+### 9.3 List price $163,200 vs plan total $163,216 (A103, The Gardenes)
+
+**Data defect (rounding in the plan), not intentional and not an app calculation error.** Plan *garden 5 payments* stores
+25% + 25% + 16.67% + 16.67% + 16.67% = **100.01%** (`PaymentPlanInstallment__c.Percentage__c` holds 4 decimals of a fraction, so
+1/6 can't be stored exactly). Each instalment is list price × percentage (also how the org's `Calculate_the_Payment_Plan_Subflow`
+works): 3 × $27,205.44 makes the total **$163,216.32**, $16.32 above the list price. The property price (EOI net price = unit
+price less discount, and the subflow's total) stays **$163,200**. The app's "percentages don't add up" warning has a 0.5% tolerance,
+so it stayed silent. Neither amount is overridden. The plan card now explains the difference. **Fix (sales admin):** set one
+16.67% row to 16.66%, or decide that the final instalment absorbs rounding. All other active plans total exactly 100%, except
+*Karblaa Gate* (95.5%), which the existing warning already flags.
+
+### 9.4 Validation (AmwajReact sandbox)
+
+| Check | Result |
+| --- | --- |
+| Apex | **50/50** pass (deploy `0AfRR00000ghnOf0AI`), incl. 11 new conversion tests run as users with the reps' profile + permission sets: person account (not "Individual"), mappings, retry/replay, existing-customer + existing deal, unmatched customer refused, linked buyer rule, company lead blocked, invalid mobile/ID, other rep's lead (404), canonical mobile duplicate, booking after failed EOI attempts (sold unit, changed price, duplicate mobile), project backfill, lead attribution |
+| Frontend | `tsc` + `vite build` pass; ESLint 0 errors (2 earlier warnings remain); Vitest **13/13** (incl. journey links, plan-total check). UI deploy `0AfRR00000ghlZs0AI` |
+| **As Sarah Khazaal** (Log in as) | *SalesUI TEST Lead* → The Gardenes / Apartment / A103 → plan pre-selected, price note shown → Continue → invalid mobile blocked in the form → converted (person account + deal *SalesUI TEST Lead-The Gardenes*, both owned by Sarah, lead *Qualified*, Company cleared) → EOI form prefilled → EOI refused for another customer's national ID, with the deal kept → corrected → **EOI-00000101** (Submitted, A103 **Held** until 11 Oct 2026, fee $2,448, net $163,200, `Lead__c` set, deal stage EOI) → 1 account, 1 deal. Reopening the convert step: "already converted", nothing reconverted |
+| Existing customer | *SalesUI TEST Lead 2* (mobile +9647700000003) matched *SalesUI TEST Customer 2* (07700000003) via the normalised mobile; "new customer" disabled; converted into that customer with a new deal (`Buyer__c` set); reopening offered "Continue to the EOI" |
+
+Test data left in the sandbox: EOI-00000101 holds A103 until 11 Oct 2026 (set it to Expired to release it); lead *SalesUI TEST
+Lead 2* converted into *SalesUI TEST Customer 2* with deal *SalesUI TEST Customer 2-The Gardenes* (no EOI).
+
+Screenshots: `booking-1-unit-continue-sales-user.jpg`, `booking-1b-plan-total-note-sales-user.jpg`,
+`booking-2-convert-review-sales-user.jpg`, `booking-3-eoi-after-conversion-sales-user.jpg`,
+`booking-3b-eoi-failure-kept-deal-sales-user.jpg`, `booking-4-eoi-created-sales-user.jpg`,
+`booking-match-existing-customer-sales-user.jpg`.
+
+**Not covered:** a real Call Centre user hitting the status rule (covered by the org's VR, not exercised); concurrent double-submit
+from two browsers (protected by the row lock and covered by the replay test, not raced live); phone width for the new pages.

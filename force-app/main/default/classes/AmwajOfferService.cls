@@ -41,6 +41,8 @@ public with sharing class AmwajOfferService {
         public String paymentMethod;
         public String notes;
         public CustomerDetails customer;
+        /** The list price the user reviewed; a different current price stops the request (nothing is created). */
+        public Decimal expectedListPrice;
     }
 
     public class CustomerDetails {
@@ -94,6 +96,12 @@ public with sharing class AmwajOfferService {
             throw AmwajSalesException.conflict('Unit ' + unit.Name + ' has no active price. Ask your sales admin to price it.');
         }
         requireEligiblePlan(pricing, req.paymentPlanId);
+        if (req.expectedListPrice != null && req.expectedListPrice.setScale(2) != pricing.price.listPrice.setScale(2)) {
+            throw AmwajSalesException.conflict(
+                'The price of unit ' + unit.Name + ' changed to ' + pricing.price.listPrice.format() + ' since you reviewed it. ' +
+                'Nothing was created. Review the new price and confirm again.'
+            );
+        }
 
         Savepoint sp = Database.setSavepoint();
         try {
@@ -106,21 +114,38 @@ public with sharing class AmwajOfferService {
                 Preferred_Payment_Plan__c = req.paymentPlanId,
                 Payment_Method__c = paymentMethod,
                 Discount__c = discount,
-                Reservation_Fees__c = (pricing.price.listPrice * RESERVATION_FEE_RATE).setScale(2),
+                Reservation_Fees__c = bookingFee(pricing.price.listPrice),
                 Notes__c = trimToNull(req.notes),
                 Status__c = 'Submitted'
             );
+            if (deal.OriginatingLead__c != null) {
+                // Lead attribution for deals converted in the app (the EOI create flow keeps a value it is given).
+                eoi.Lead__c = deal.OriginatingLead__c;
+            }
             SYSTEM_WRITES.insertRecord(eoi);
+            if (deal.Project__c != unit.Project__c) {
+                // As the EOI screen flow's "Backfill Opportunity Project" step does.
+                SYSTEM_WRITES.updateRecord(new Opportunity(Id = deal.Id, Project__c = unit.Project__c));
+            }
             return eoiResult(eoi.Id, false);
         } catch (DmlException e) {
             Database.rollback(sp);
-            throw AmwajSalesException.badRequest(e.getDmlMessage(0));
+            throw AmwajSalesException.badRequest(
+                e.getDmlType(0) == StatusCode.DUPLICATE_VALUE
+                    ? 'Another customer in Salesforce already has this mobile number or national ID. Check the customer details.'
+                    : e.getDmlMessage(0)
+            );
         }
+    }
+
+    /** Booking (reservation) fee as the org's EOI flow sets it. */
+    public static Decimal bookingFee(Decimal listPrice) {
+        return listPrice == null ? null : (listPrice * RESERVATION_FEE_RATE).setScale(2);
     }
 
     private static Map<String, Object> eoiResult(Id eoiId, Boolean replayed) {
         EOI__c e = SYSTEM_QUERIES.eoi(eoiId);
-        return new Map<String, Object>{
+        Map<String, Object> out = new Map<String, Object>{
             'eoiId' => e.Id,
             'name' => e.Name,
             'status' => e.Status__c,
@@ -129,10 +154,33 @@ public with sharing class AmwajOfferService {
             'discountPct' => e.Discount__c,
             'reservationFee' => e.Reservation_Fees__c,
             'netUnitPrice' => e.Unit_Price__c,
+            'paymentMethod' => e.Payment_Method__c,
+            'unitId' => e.Inventory__c,
             'unitName' => e.Inventory__r?.Name,
             'unitStatus' => e.Inventory__r?.Status__c,
+            'projectName' => e.Project__r?.Name,
+            'paymentPlanId' => e.Preferred_Payment_Plan__c,
+            'paymentPlanName' => e.Preferred_Payment_Plan__r?.Name,
+            'customerId' => e.PersonAccount__c,
+            'customerName' => e.PersonAccount__r?.Name,
+            'dealId' => e.LinkedOpportunity__c,
+            'dealName' => e.LinkedOpportunity__r?.Name,
+            'recordUrl' => URL.getOrgDomainUrl().toExternalForm() + '/lightning/r/EOI__c/' + e.Id + '/view',
             'replayed' => replayed
         };
+        out.put(
+            'nextStep',
+            AmwajSalesReadService.eoiNextStep(
+                new Map<String, Object>{
+                    'status' => e.Status__c,
+                    'approvalStatus' => e.Approval_Status__c,
+                    'discountPct' => e.Discount__c,
+                    'documentAttached' => e.EOI_Document_Attached__c
+                },
+                new List<Map<String, Object>>()
+            )
+        );
+        return out;
     }
 
     // ================================================================= Reservation
@@ -425,8 +473,7 @@ public with sharing class AmwajOfferService {
     }
 
     /** Same rule as the Mobile_Number_Must_be_in_Iraq validation rules. */
-    @TestVisible
-    private static Boolean isValidMobile(String m) {
+    public static Boolean isValidMobile(String m) {
         Boolean iraqi = (m.startsWith('075') || m.startsWith('077') || m.startsWith('078') || m.startsWith('079')) &&
             m.length() == 11;
         Boolean international = (m.startsWith('+') || m.startsWith('00')) && m.length() >= 12 && m.length() <= 16;
@@ -456,7 +503,7 @@ public with sharing class AmwajOfferService {
     private without sharing class SystemQueries {
         Opportunity lockDeal(Id dealId) {
             return [
-                SELECT Id, IsClosed, StageName, AccountId, Project__c, EOI_Created__c, Reservation_Created__c
+                SELECT Id, IsClosed, StageName, AccountId, Project__c, EOI_Created__c, Reservation_Created__c, OriginatingLead__c
                 FROM Opportunity
                 WHERE Id = :dealId
                 WITH SYSTEM_MODE
@@ -517,7 +564,9 @@ public with sharing class AmwajOfferService {
         EOI__c eoi(Id eoiId) {
             return [
                 SELECT Id, Name, Status__c, Approval_Status__c, ExpiryDate__c, Discount__c, Reservation_Fees__c,
-                    Unit_Price__c, Inventory__r.Name, Inventory__r.Status__c
+                    Unit_Price__c, Payment_Method__c, EOI_Document_Attached__c, Inventory__c, Inventory__r.Name,
+                    Inventory__r.Status__c, Project__r.Name, Preferred_Payment_Plan__c, Preferred_Payment_Plan__r.Name,
+                    PersonAccount__c, PersonAccount__r.Name, LinkedOpportunity__c, LinkedOpportunity__r.Name
                 FROM EOI__c
                 WHERE Id = :eoiId
                 WITH SYSTEM_MODE

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AlertTriangle, ChevronDown } from 'lucide-react';
 import type { Plan } from '@/api/salesTypes';
 import { StatusPill } from '@/components/app/Primitives';
+import { planTotalDiffers } from '@/lib/booking';
 import { money } from '@/lib/format';
 import { FREQUENCY, INSTALLMENT_TYPE } from '@/lib/salesLabels';
 import { cn } from '@/lib/utils';
@@ -68,6 +69,7 @@ export function PaymentPlanList({
                     .join(' · ')}
                 </div>
                 {!disabled && <PlanSummary plan={plan} currency={currency} />}
+                {!disabled && planTotalDiffers(plan) && <PlanTotalNote plan={plan} currency={currency} />}
                 {disabled && (
                   <p className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-700">
                     <AlertTriangle className="size-3.5" aria-hidden="true" /> Not available: {plan.misconfiguredReason}
@@ -133,6 +135,26 @@ export function PaymentPlanList({
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * Explains a plan total that differs from the list price because the plan's
+ * percentages in Salesforce don't add up to exactly 100%. Both amounts are shown
+ * as Salesforce has them; neither is changed here.
+ */
+function PlanTotalNote({ plan, currency }: { plan: Plan; currency: string }) {
+  const diff = (plan.totalAmount ?? 0) - (plan.effectivePrice ?? 0);
+  return (
+    <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-900">
+      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+      <span>
+        The payments add up to {money(plan.totalAmount, currency, 2)}, {money(Math.abs(diff), currency, 2)}{' '}
+        {diff > 0 ? 'more' : 'less'} than the list price of {money(plan.effectivePrice, currency)}, because this plan's
+        percentages in Salesforce total {pct(plan.totalPercentage)} instead of 100%. The property price stays the list
+        price. Ask your sales admin to correct the plan before quoting payment amounts.
+      </span>
+    </p>
   );
 }
 

@@ -203,6 +203,18 @@ function LeadProgress({ lead, onSaved }: { lead: LeadDetail; onSaved: (l: LeadDe
 
 function ConvertCard({ lead }: { lead: LeadDetail }) {
   const url = salesforceRecordUrl('Lead', lead.id);
+  if (lead.isConverted) {
+    return (
+      <Section title="Converted">
+        <p className="text-sm text-muted-foreground">This lead is already a customer. Bookings continue on their deal.</p>
+        {lead.convertedDealId && (
+          <Button asChild size="lg" className="mt-3 w-full">
+            <Link to={`/customers/${lead.convertedDealId}`}>Open the customer</Link>
+          </Button>
+        )}
+      </Section>
+    );
+  }
   return (
     <Section title="Ready to buy?">
       <Button asChild size="lg" className="mb-3 w-full">
@@ -211,11 +223,11 @@ function ConvertCard({ lead }: { lead: LeadDetail }) {
         </Link>
       </Button>
       <p className="text-sm text-muted-foreground">
-        EOIs are created on a customer deal. When this lead is qualified, convert it in Salesforce
-        {lead.buyerName ? ` into the existing customer ${lead.buyerName}` : ''}. The new deal then appears under Customers.
+        Choose a unit and payment plan, then continue to booking. You'll confirm the buyer's details and convert the lead into
+        a customer and deal here{lead.buyerName ? ` (into the existing customer ${lead.buyerName})` : ''}, then create the EOI.
       </p>
       {url && (
-        <Button asChild variant="outline" size="lg" className="mt-3 w-full">
+        <Button asChild variant="link" size="sm" className="mt-2 h-auto px-0">
           <a href={url} target="_blank" rel="noreferrer">
             Open lead in Salesforce <ExternalLink />
           </a>

@@ -5,11 +5,11 @@
  * CSRF token). Identity always comes from the session (UserInfo); the API
  * never accepts an owner or user id from the client.
  *
- *   GET   me | overview | leads | leads/{id} | deals | deals/{id} | units/facets
- *         units | units/{id} | eois | eois/{id} | commission | files/{versionId}
+ *   GET   me | overview | leads | leads/{id} | leads/{id}/conversion | deals | deals/{id}
+ *         units/facets | units | units/{id} | eois | eois/{id} | commission | files/{versionId}
  *   PATCH leads/{id}
- *   POST  leads/{id}/activities | deals/{id}/activities | activities/{id}/complete
- *         eois | eois/{id}/document | reservations
+ *   POST  leads/{id}/activities | leads/{id}/matches | leads/{id}/convert | deals/{id}/activities
+ *         activities/{id}/complete | eois | eois/{id}/document | reservations
  */
 @RestResource(urlMapping='/amwaj/sales/v1/*')
 global with sharing class AmwajSalesApi {
@@ -78,6 +78,9 @@ global with sharing class AmwajSalesApi {
                     return AmwajSalesReadService.overview();
                 }
                 when 'leads' {
+                    if (n == 3 && s[2] == 'conversion') {
+                        return AmwajLeadConversionService.review(idAt(s, 1));
+                    }
                     return n == 1
                         ? AmwajSalesReadService.leads(req.params.get('status'), req.params.get('search'), req.params.get('projectId'))
                         : AmwajSalesReadService.leadDetail(idAt(s, 1));
@@ -112,6 +115,16 @@ global with sharing class AmwajSalesApi {
                 return AmwajLeadService.addActivity(
                     idAt(s, 1),
                     (AmwajLeadService.ActivityRequest) parse(req, AmwajLeadService.ActivityRequest.class)
+                );
+            }
+            if (head == 'leads' && n == 3 && s[2] == 'matches') {
+                Map<String, Object> body = (Map<String, Object>) JSON.deserializeUntyped(bodyOf(req));
+                return AmwajLeadConversionService.matches(idAt(s, 1), (String) body.get('mobile'), (String) body.get('nationalId'));
+            }
+            if (head == 'leads' && n == 3 && s[2] == 'convert') {
+                return AmwajLeadConversionService.convert(
+                    idAt(s, 1),
+                    (AmwajLeadConversionService.ConvertRequest) parse(req, AmwajLeadConversionService.ConvertRequest.class)
                 );
             }
             if (head == 'activities' && n == 3 && s[2] == 'complete') {
