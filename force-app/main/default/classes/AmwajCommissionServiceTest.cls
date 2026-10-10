@@ -100,6 +100,38 @@ private class AmwajCommissionServiceTest {
     }
 
     @IsTest
+    static void soldUnitWithoutEligibleCollectionsEarnsNothing() {
+        Map<String, Object> active = reservation(30000, false);
+        active.put('Status__c', 'Active');
+        AmwajCommissionService.Line unsigned = AmwajCommissionService.calculate(
+            eoi(false, false, 4500, new List<Map<String, Object>>{ active }, 'Submitted'),
+            null,
+            1
+        );
+        Assert.areEqual('SOLD', unsigned.saleStatus);
+        Assert.areEqual(0, unsigned.eligibleBasis, 'Sold, but nothing confirmed and no signed EOI on file');
+        Assert.areEqual(0, unsigned.commission);
+        Assert.areEqual('AWAITING_SIGNATURE', unsigned.state);
+        Assert.areEqual(0, unsigned.unconfirmedPropertyPayments, 'An active reservation has no deposit left to request');
+    }
+
+    @IsTest
+    static void carriedOverDepositIsNotCommissionedTwice() {
+        Map<String, Object> live = reservation(25000, true);
+        live.put('Status__c', 'PendingWithContracts');
+        Map<String, Object> cancelled = reservation(25000, true);
+        cancelled.put('Status__c', 'Cancelled');
+        AmwajCommissionService.Line line = AmwajCommissionService.calculate(
+            eoi(true, true, 3000, new List<Map<String, Object>>{ live, cancelled }, 'Paid'),
+            null,
+            1
+        );
+        Assert.areEqual(28000, line.eligibleBasis);
+        Assert.areEqual(25000, line.excludedDeposits);
+        Assert.areEqual('RESERVED', line.saleStatus);
+    }
+
+    @IsTest
     static void noRateMeansNoCommission() {
         AmwajCommissionService.Line line = AmwajCommissionService.calculate(
             eoi(true, true, 5000, new List<Map<String, Object>>(), 'Paid'),

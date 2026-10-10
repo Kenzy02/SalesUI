@@ -6,11 +6,13 @@ import LeadDetailPage from './pages/LeadDetailPage';
 import ConvertLeadPage from './pages/ConvertLeadPage';
 import CustomersPage from './pages/CustomersPage';
 import CustomerDetailPage from './pages/CustomerDetailPage';
+import CustomerPortfolioPage from './pages/CustomerPortfolioPage';
 import UnitsPage from './pages/UnitsPage';
 import UnitDetailPage from './pages/UnitDetailPage';
 import EoisPage from './pages/EoisPage';
 import NewEoiPage from './pages/NewEoiPage';
 import EoiDetailPage from './pages/EoiDetailPage';
+import ReservationsPage from './pages/ReservationsPage';
 import CommissionPage from './pages/CommissionPage';
 import NotFound from './pages/NotFound';
 
@@ -24,12 +26,14 @@ export const routes: RouteObject[] = [
       { path: 'leads/:id', element: <LeadDetailPage /> },
       { path: 'leads/:id/convert', element: <ConvertLeadPage /> },
       { path: 'customers', element: <CustomersPage /> },
+      { path: 'customers/account/:accountId', element: <CustomerPortfolioPage /> },
       { path: 'customers/:id', element: <CustomerDetailPage /> },
       { path: 'units', element: <UnitsPage /> },
       { path: 'units/:id', element: <UnitDetailPage /> },
       { path: 'eois', element: <EoisPage /> },
       { path: 'eois/new', element: <NewEoiPage /> },
       { path: 'eois/:id', element: <EoiDetailPage /> },
+      { path: 'reservations', element: <ReservationsPage /> },
       { path: 'commission', element: <CommissionPage /> },
       { path: '*', element: <NotFound /> },
     ],

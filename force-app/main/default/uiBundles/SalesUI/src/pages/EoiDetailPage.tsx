@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 import { Check, Circle, Download, FileText, Hourglass, Lock, Upload } from 'lucide-react';
 import { ApiError, fileObjectUrl, fileToBase64, salesApi } from '@/api/salesApi';
 import type { EoiRow, ReservationCreated } from '@/api/salesTypes';
+import { GenerateEoiPdfButton } from '@/components/app/GenerateEoiPdf';
 import { useMe } from '@/components/app/MeContext';
 import { FormField, TextArea, TextInput } from '@/components/app/FormControls';
 import { PaymentPlanList } from '@/components/app/PaymentPlans';
@@ -11,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/sonner';
 import { useApi } from '@/hooks/useApi';
+import { isGeneratedEoiFile } from '@/lib/eoiDocument';
 import { date, daysUntil, fileSize, money, percent, relativeDays } from '@/lib/format';
 import { EOI_STATUS, EOI_STEP, RESERVATION_STATUS } from '@/lib/salesLabels';
 import { cn } from '@/lib/utils';
@@ -43,11 +45,14 @@ export default function EoiDetailPage() {
               </span>
             }
             actions={
-              eoi.nextStep === 'CREATE_RESERVATION' && me.canCreateReservation ? (
-                <Button size="lg" onClick={() => setReserveOpen(true)}>
-                  <Lock /> Reserve unit ({me.reservationHoldDays ?? '—'}-day hold)
-                </Button>
-              ) : undefined
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <GenerateEoiPdfButton eoiId={eoi.id} onSaved={reload} />
+                {eoi.nextStep === 'CREATE_RESERVATION' && me.canCreateReservation && (
+                  <Button size="lg" onClick={() => setReserveOpen(true)}>
+                    <Lock /> Reserve unit ({me.reservationHoldDays ?? '—'}-day hold)
+                  </Button>
+                )}
+              </div>
             }
           />
           {eoi.nextStep && (
@@ -143,6 +148,7 @@ export default function EoiDetailPage() {
 
 function Progress({ eoi }: { eoi: EoiRow }) {
   const hasDiscount = (eoi.discountPct ?? 0) > 0;
+  const signedCount = eoi.documents.filter(d => !isGeneratedEoiFile(d.title)).length;
   const live = eoi.reservations.find(r => r.status !== 'Cancelled' && r.status !== 'Terminated');
   const steps: { label: string; done: boolean; detail: ReactNode }[] = [
     { label: 'EOI created and unit hold requested', done: true, detail: date(eoi.createdDate) },
@@ -158,7 +164,7 @@ function Progress({ eoi }: { eoi: EoiRow }) {
     {
       label: 'Signed EOI document on file',
       done: !!eoi.documentAttached,
-      detail: eoi.documentAttached ? `${eoi.documents.length || 'No'} file${eoi.documents.length === 1 ? '' : 's'} on this EOI` : 'Not yet',
+      detail: eoi.documentAttached ? `${signedCount || 'No'} file${signedCount === 1 ? '' : 's'} on this EOI` : 'Not yet',
     },
     {
       label: 'Booking fee confirmed by finance',
@@ -237,6 +243,8 @@ function SignedDocument({ eoi, onUpdated }: { eoi: EoiRow; onUpdated: (e: EoiRow
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canUpload = me.canEditEoi && eoi.canEdit && eoi.status === 'Submitted';
+  const signed = eoi.documents.filter(d => !isGeneratedEoiFile(d.title));
+  const generated = eoi.documents.filter(d => isGeneratedEoiFile(d.title));
 
   const upload = async (file: File) => {
     setError(null);
@@ -270,29 +278,20 @@ function SignedDocument({ eoi, onUpdated }: { eoi: EoiRow; onUpdated: (e: EoiRow
       title="Signed EOI"
       description="Signature evidence is the signed EOI document filed in Salesforce. There is no electronic signature on this process."
     >
-      {eoi.documents.length > 0 ? (
-        <ul className="space-y-2">
-          {eoi.documents.map(d => (
-            <li key={d.versionId} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
-              <span className="flex min-w-0 items-center gap-2 text-sm">
-                <FileText className="size-4 shrink-0 text-brand-steel" aria-hidden="true" />
-                <span className="truncate font-medium">{d.title}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {d.fileType} {fileSize(d.size)} · {date(d.createdDate)}
-                </span>
-              </span>
-              <Button variant="ghost" size="sm" onClick={() => open(d.versionId)}>
-                <Download /> Open
-              </Button>
-            </li>
-          ))}
-        </ul>
+      {signed.length > 0 ? (
+        <FileList files={signed} onOpen={open} />
       ) : eoi.documentAttached ? (
         <p className="text-sm text-muted-foreground">
           Salesforce shows the signed EOI as attached, but the file is not linked to this EOI record, so it can't be shown here.
         </p>
       ) : (
         <p className="text-sm text-muted-foreground">No signed EOI document is on file yet.</p>
+      )}
+      {generated.length > 0 && (
+        <div className="mt-4">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Generated PDFs (unsigned, not signature evidence)</h3>
+          <FileList files={generated} onOpen={open} />
+        </div>
       )}
       {canUpload ? (
         <div className="mt-4 space-y-2">
@@ -320,6 +319,27 @@ function SignedDocument({ eoi, onUpdated }: { eoi: EoiRow; onUpdated: (e: EoiRow
         )
       )}
     </Section>
+  );
+}
+
+function FileList({ files, onOpen }: { files: EoiRow['documents']; onOpen: (versionId: string) => void }) {
+  return (
+    <ul className="space-y-2">
+      {files.map(d => (
+        <li key={d.versionId} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+          <span className="flex min-w-0 items-center gap-2 text-sm">
+            <FileText className="size-4 shrink-0 text-brand-steel" aria-hidden="true" />
+            <span className="truncate font-medium">{d.title}</span>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {d.fileType} {fileSize(d.size)} · {date(d.createdDate)}
+            </span>
+          </span>
+          <Button variant="ghost" size="sm" onClick={() => onOpen(d.versionId)}>
+            <Download /> Open
+          </Button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

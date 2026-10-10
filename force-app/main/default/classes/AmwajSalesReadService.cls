@@ -627,6 +627,59 @@ public with sharing class AmwajSalesReadService {
         return r;
     }
 
+    private static final Integer MAX_RESERVATIONS = 200;
+
+    private static final Map<String, String> RESERVATION_LIST_ROW = new Map<String, String>{
+        'name' => 'Name',
+        'status' => 'Status__c',
+        'holdExpiry' => 'HoldExpiry__c',
+        'listPrice' => 'ListPrice__c',
+        'discountPct' => 'Discount__c',
+        'netPrice' => 'NetPrice__c',
+        'deposit' => 'DepositAmount__c',
+        'depositVerified' => 'DepositVerified__c',
+        'depositVerifiedDate' => 'DepositVerifiedDate__c',
+        'saleDate' => 'ActivationDate__c',
+        'cancelledDate' => 'CancelledDate__c',
+        'paymentPlanName' => 'PaymentPlan__r.Name',
+        'eoiId' => 'EOI__c',
+        'eoiName' => 'EOI__r.Name',
+        'dealId' => 'Opportunity__c',
+        'dealName' => 'Opportunity__r.Name',
+        'accountId' => 'PersonAccount__c',
+        'customerName' => 'PersonAccount__r.Name',
+        'dealAccountName' => 'Opportunity__r.Account.Name',
+        'unitId' => 'Inventory__c',
+        'unitName' => 'Inventory__r.Name',
+        'projectName' => 'Inventory__r.Project__r.Name',
+        'createdDate' => 'CreatedDate'
+    };
+
+    /** Reservations the user owns or that sit on deals they own, in the user's own access (newest first). */
+    public static Map<String, Object> reservations() {
+        AmwajSalesSupport.requireReadable(Reservation__c.SObjectType);
+        Id me = AmwajSalesSupport.currentUserId();
+        List<String> clauses = new List<String>{ 'OwnerId = :me' };
+        if (AmwajSalesSupport.canRead(Reservation__c.SObjectType, 'Opportunity__r.OwnerId')) {
+            clauses.add('Opportunity__r.OwnerId = :me');
+        }
+        Integer maxRows = MAX_RESERVATIONS;
+        List<Map<String, Object>> out = new List<Map<String, Object>>();
+        for (SObject res : Database.query(
+            'SELECT ' + AmwajSalesSupport.selectList(Reservation__c.SObjectType, RESERVATION_LIST_ROW.values()) +
+            ' FROM Reservation__c WHERE (' + String.join(clauses, ' OR ') + ')' +
+            ' WITH USER_MODE ORDER BY CreatedDate DESC LIMIT :maxRows'
+        )) {
+            Map<String, Object> r = AmwajSalesSupport.row(res, RESERVATION_LIST_ROW);
+            if (r.get('customerName') == null) {
+                r.put('customerName', r.get('dealAccountName'));
+            }
+            r.remove('dealAccountName');
+            out.add(r);
+        }
+        return new Map<String, Object>{ 'reservations' => out, 'truncated' => out.size() >= MAX_RESERVATIONS };
+    }
+
     private static List<Map<String, Object>> reservationRows(Id dealId) {
         List<Map<String, Object>> out = new List<Map<String, Object>>();
         if (!Schema.SObjectType.Reservation__c.isAccessible()) {

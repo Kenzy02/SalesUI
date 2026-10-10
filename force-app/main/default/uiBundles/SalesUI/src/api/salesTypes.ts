@@ -146,6 +146,33 @@ export interface ReservationRow {
   eoiName?: string;
 }
 
+/** One reservation in the user's list (`GET reservations`); absent fields are not recorded or not readable. */
+export interface ReservationListRow {
+  id: string;
+  name?: string;
+  status?: string;
+  holdExpiry?: string;
+  listPrice?: number;
+  discountPct?: number;
+  netPrice?: number;
+  deposit?: number;
+  depositVerified?: boolean;
+  depositVerifiedDate?: string;
+  saleDate?: string;
+  cancelledDate?: string;
+  paymentPlanName?: string;
+  eoiId?: string;
+  eoiName?: string;
+  dealId?: string;
+  dealName?: string;
+  accountId?: string;
+  customerName?: string;
+  unitId?: string;
+  unitName?: string;
+  projectName?: string;
+  createdDate?: string;
+}
+
 export interface FileRef {
   versionId: string;
   title?: string;
@@ -349,8 +376,11 @@ export interface OverviewFollowUp {
 
 export interface CommissionSummary {
   ratePct?: number;
+  rateStatus?: 'PROPOSED_UNCONFIRMED';
   currencyCode: string;
   commission: number;
+  soldCommission?: number;
+  soldUnits?: number;
   eligibleBasis: number;
   awaitingSignatureBasis: number;
   paidTracked: boolean;
@@ -375,10 +405,25 @@ export interface CommissionLine {
   eoiStatus?: string;
   dealId?: string;
   dealName?: string;
+  customerId?: string;
   customerName?: string;
+  unitId?: string;
   unitName?: string;
+  projectId?: string;
   projectName?: string;
   signed: boolean;
+  saleStatus: SaleStatus;
+  reservationId?: string;
+  reservationName?: string;
+  reservationStatus?: string;
+  /** Reservation activation date; absent when not recorded. */
+  saleDate?: string;
+  /** Reservation net price, read in the user's own access. */
+  saleValue?: number;
+  /** False when the reservation (or its price) is not shared with the user. */
+  saleDetailsVisible: boolean;
+  /** Confirmed deposits on cancelled reservations not counted, because a later reservation on the same EOI has its own. */
+  excludedDeposits: number;
   propertyPayments: number;
   bookingFees: number;
   tax: number;
@@ -393,6 +438,8 @@ export interface CommissionLine {
 
 export interface Commission {
   ratePct?: number;
+  /** No approval of the rate is recorded in Salesforce. */
+  rateStatus: 'PROPOSED_UNCONFIRMED';
   currencyCode: string;
   taxRecorded: boolean;
   paidTracked: boolean;
@@ -404,6 +451,11 @@ export interface Commission {
   eligibleBasis: number;
   awaitingSignatureBasis: number;
   commission: number;
+  soldUnits: number;
+  soldEligibleBasis: number;
+  soldCommission: number;
+  notSoldEligibleBasis: number;
+  notSoldCommission: number;
   propertyCommission: number;
   bookingFeeCommission: number;
   taxCommission: number;
@@ -545,4 +597,203 @@ export interface ReservationCreated {
   unitName?: string;
   unitStatus?: string;
   replayed: boolean;
+}
+
+/** Where a unit stands for its customer (AmwajPaymentLedger). */
+export type SaleStatus = 'SOLD' | 'RESERVED' | 'EOI_HOLD' | 'CLOSED';
+
+export type PaymentFlag = 'POSSIBLE_CARRIED_DEPOSIT' | 'EXPIRED_FEE_NOT_REFUNDED';
+
+/** Customer-level payment figures. A null amount means not available to this user (field access), never zero. */
+export interface PortfolioPayments {
+  confirmedPaid: number | null;
+  confirmedBookingFees: number | null;
+  confirmedDeposits: number | null;
+  refunds: number | null;
+  pendingConfirmation: number | null;
+  excludedDeposits: number | null;
+  /** Net price of sold and reserved units; null when none, or a price isn't visible. */
+  propertyPrice?: number | null;
+  confirmedTowardPrice?: number | null;
+  /**
+   * Live: the org records no instalment schedule, receipts or due dates, so these are absent
+   * and installmentsRecorded is false. Demo mode fills them from its sample schedules.
+   */
+  remainingPayable?: number | null;
+  overdue?: number | null;
+  nextPayment?: NextPayment | null;
+  installmentsRecorded: boolean;
+  installments?: InstallmentCounts;
+}
+
+export interface NextPayment {
+  dueDate: string;
+  amount: number;
+  label: string;
+}
+
+/** Mutually exclusive: paid in full, part paid, past due with nothing paid, not yet due. */
+export interface InstallmentCounts {
+  paid: number;
+  partial: number;
+  overdue: number;
+  upcoming: number;
+}
+
+export type InstallmentStatus = 'PAID' | 'PARTIAL' | 'OVERDUE' | 'UPCOMING';
+
+/** One line of a payment schedule (demo mode only; Salesforce records none). */
+export interface ScheduleLine {
+  key: string;
+  label: string;
+  dueDate: string;
+  amount: number;
+  paid: number;
+  paidDate?: string;
+  status: InstallmentStatus;
+}
+
+export interface PortfolioUnit {
+  key: string;
+  unitId?: string;
+  unitName?: string;
+  projectName?: string;
+  saleStatus: SaleStatus;
+  eoiStatus?: string;
+  reservationStatus?: string;
+  netConfirmed: number;
+  price?: number;
+}
+
+export interface CustomerCounts {
+  sold: number;
+  reserved: number;
+  eoiHold: number;
+  closed: number;
+  deals: number;
+  myDeals: number;
+}
+
+export interface CustomerCard {
+  id: string;
+  name?: string;
+  mobile?: string;
+  phone?: string;
+  email?: string;
+  counts: CustomerCounts;
+  units: PortfolioUnit[];
+  payments: PortfolioPayments;
+  flags: PaymentFlag[];
+  /** A deal says an EOI or reservation exists that isn't shared with the user. */
+  hiddenRecords: boolean;
+  lastActivity?: string;
+}
+
+export interface CustomerList {
+  customers: CustomerCard[];
+  totals: {
+    customers: number;
+    sold: number;
+    reserved: number;
+    eoiHold: number;
+    confirmedPaid: number | null;
+    pendingConfirmation: number | null;
+    /** Demo mode only. */
+    remainingPayable?: number | null;
+    overdue?: number | null;
+  };
+  truncated: boolean;
+  paymentsReadable: boolean;
+}
+
+/** AmwajPaymentLedger.UnitMoney */
+export interface UnitMoney {
+  bookingFee?: number;
+  bookingFeeConfirmed: boolean;
+  bookingFeeConfirmedDate?: string;
+  confirmedBookingFee: number;
+  pendingBookingFee: number;
+  confirmedDeposits: number;
+  confirmedTowardPrice: number;
+  pendingDeposits: number;
+  excludedDeposits: number;
+  refunds: number;
+  refundSource?: 'REFUND_REQUEST' | 'EOI';
+  netConfirmed: number;
+  price?: number;
+  flags: PaymentFlag[];
+}
+
+export interface PortfolioDeal {
+  id: string;
+  name?: string;
+  stage?: string;
+  isClosed?: boolean;
+  projectName?: string;
+  ownerName?: string;
+  isMine: boolean;
+}
+
+export interface PortfolioEoi {
+  id: string;
+  name?: string;
+  status?: string;
+  approvalStatus?: string;
+  bookingFee?: number;
+  paymentVerified?: boolean;
+  paymentVerifiedDate?: string;
+  documentAttached?: boolean;
+  expiryDate?: string;
+  offerPrice?: number;
+  discountPct?: number;
+  paymentMethod?: string;
+  paymentPlanName?: string;
+  refundedAmount?: number;
+  refundedDate?: string;
+}
+
+export interface PortfolioReservation {
+  id: string;
+  name?: string;
+  status?: string;
+  holdExpiry?: string;
+  listPrice?: number;
+  discountPct?: number;
+  netPrice?: number;
+  deposit?: number;
+  depositVerified?: boolean;
+  depositVerifiedDate?: string;
+  saleDate?: string;
+  cancelledDate?: string;
+  paymentPlanName?: string;
+}
+
+export interface PortfolioRefund {
+  id: string;
+  name?: string;
+  status?: string;
+  approvedAmount?: number;
+  requestedAmount?: number;
+  processedDate?: string;
+}
+
+export interface PortfolioUnitDetail extends PortfolioUnit {
+  dealId?: string;
+  deal?: PortfolioDeal;
+  eoi?: PortfolioEoi;
+  reservations: PortfolioReservation[];
+  refunds: PortfolioRefund[];
+  saleDate?: string;
+  paymentPlanName?: string;
+  /** Null when the user can't read the payment fields. */
+  money?: UnitMoney | null;
+  /** Demo mode only: the sample payment schedule for a sold or reserved unit. */
+  schedule?: ScheduleLine[];
+}
+
+export interface CustomerPortfolio extends Omit<CustomerCard, 'units'> {
+  units: PortfolioUnitDetail[];
+  deals: PortfolioDeal[];
+  paymentsReadable: boolean;
+  truncated: boolean;
 }

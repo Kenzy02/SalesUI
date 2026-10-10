@@ -125,7 +125,16 @@ export default function CustomerDetailPage() {
             </div>
 
             <div className="space-y-6">
-              <Section title="Customer">
+              <Section
+                title="Customer"
+                action={
+                  deal.accountId ? (
+                    <Link to={`/customers/account/${deal.accountId}`} className="text-sm font-medium text-brand-steel hover:underline">
+                      All units and payments
+                    </Link>
+                  ) : undefined
+                }
+              >
                 <div className="mb-4 flex flex-col gap-2">
                   {deal.mobile && (
                     <Button asChild variant="outline" size="lg" className="justify-start">

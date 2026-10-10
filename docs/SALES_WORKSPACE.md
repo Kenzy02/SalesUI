@@ -65,7 +65,7 @@ The 14-day *offer* hold in the earlier demo was a demo assumption, not a require
 (1%), created during this project. The UI labels it "Proposed … pending confirmation". **Unconfirmed assumptions:** attribution
 to the current deal owner; cash basis (processed refunds deduct, so an expired or cancelled EOI keeps commission until a refund
 is processed); no splits; payout handled elsewhere. Tax is **not recorded** in the org and is shown as unavailable, not zero.
-Commission paid is **not tracked**.
+Commission paid is **not tracked**. Per-sold-unit breakdown and the shared payment reconciliation: §10.
 
 ## 4. Filters
 
@@ -76,7 +76,9 @@ Commission paid is **not tracked**.
 | Units | Availability, bedrooms (min), zone, min/max price, search | `Status__c`, `Bedrooms__c`, `Zone__c` (per project), `Unit_Price__c`, `Name`/`UnitCode__c`/`Building__r.Name` | All server-side; count and pagination cover every match; chips + Clear filters |
 | Units | Customer context | `?dealId=` / `?leadId=` | Starts from the deal's `Project__c` or the lead's `Project_Interest__c`, and the unit type of `Interested_Unit__c` (the only unit-type preference the org records). Applied once; later browsing never changes the customer record. Carried to unit detail and into the EOI form; filters kept on "Back to units" |
 | My leads | Project of interest | `Lead.Project_Interest__c` or `nd_Project_of_Interest__c` | No unit-type preference field exists on leads (data gap, not invented) |
-| Customers | Project | `Opportunity.Project__c` | — |
+| Customers | Project | `Opportunity.Project__c` of any of the customer's deals, or the project of any of their EOIs/reservations | Server-side; totals cover every matching customer (§10) |
+| Customers | Search | Account `Name`, `PersonMobilePhone`, `Phone`, `PersonEmail` | Server-side |
+| My commission | Project, customer, unit/EOI/reservation text | Lines from the commission service | Client-side over the complete line set; totals follow the filter |
 
 Projects without an active payment plan (Iraq Gate) show a notice on Units, and unit detail explains why an EOI can't start. No
 plan is created and eligibility is not bypassed.
@@ -130,7 +132,8 @@ sf project deploy start -o <alias> \
   --source-dir force-app/main/default/customMetadata \
   --source-dir force-app/main/default/uiBundles/SalesUI \
   --test-level RunSpecifiedTests --tests AmwajLeadConversionServiceTest --tests AmwajOfferServiceTest \
-  --tests AmwajCommissionServiceTest --tests AmwajSalesApiTest --tests PaymentPlanViewerControllerTest
+  --tests AmwajCommissionServiceTest --tests AmwajSalesApiTest --tests PaymentPlanViewerControllerTest \
+  --tests AmwajPaymentLedgerTest --tests AmwajCustomerPortfolioServiceTest --tests AmwajEoiDocumentServiceTest
 # Deploy the permission set separately, after the class exists (deploying it with a brand-new class is what lost the grant):
 sf project deploy start -o <alias> --source-dir force-app/main/default/permissionsets/SalesUI_Access.permissionset-meta.xml
 ```
@@ -225,3 +228,207 @@ Screenshots: `booking-1-unit-continue-sales-user.jpg`, `booking-1b-plan-total-no
 
 **Not covered:** a real Call Centre user hitting the status rule (covered by the org's VR, not exercised); concurrent double-submit
 from two browsers (protected by the row lock and covered by the replay test, not raced live); phone width for the new pages.
+
+
+## 10. Customer cards, payment reconciliation and commission per sold unit (Oct 2026)
+
+### 10.1 What the old cards were, and what they are now
+The Customers page showed **one card per deal** (Opportunity), so a buyer with three deals appeared three times and no card showed
+money. It now shows **one card per customer, grouped by Account (person account) Id**. The customers are those on deals the user owns;
+each card combines every deal, EOI, reservation and refund on that customer **that the user can see** (user mode). Card: name and
+phone → units sold / reserved / held by EOI (separately; a held or reserved unit is never called owned) with up to 3 units and
+**View all N units** → payment summary. **View customer** opens `/customers/account/:accountId`, with one section per unit
+(deal, EOI, reservation, sale status, payments). The deal page (`/customers/:dealId`) stays and links to the overview.
+
+### 10.2 What the org records about money (inspected; nothing created)
+| Concept | Record | Confirmed when | Notes |
+| --- | --- | --- | --- |
+| Booking fee | `EOI__c.Reservation_Fees__c` | `PaymentVerifiedByFinance__c` (flow stamps `PaymentVerifiedDate__c`, EOI → Paid) | The org's reservation screen labels it "EOI Percent (1.5%, **additional**)": charged on top of the price, never deducted from it |
+| Deposit | `Reservation__c.DepositAmount__c` (plan down payment, or the amount entered for cash) | `DepositVerified__c` (flow: → PendingWithContracts, unit Reserved) | Screen help text: "will be deducted from the total Unit Price" |
+| Price obligation | `Reservation__c.NetPrice__c` = `ListPrice__c × (1 − Discount__c)` | — | Only for live or sold reservations |
+| Sale | `Reservation__c.Status__c = Active` (contract document filed) | Flow sets `ActivationDate__c`, unit Sold, deal Closed Won | Sale date = `ActivationDate__c` |
+| Refund | `RefundRequest__c` Status Processed (`ApprovedAmount__c`) | Flow on Approved + document: Processed; `EOI__c` → Refunded with `RefundedAmount__c` | Refunds only target EOIs (a validation rule blocks them once a reservation is in contracts or active) |
+| Instalment schedule, receipts, allocations, due dates, tax | **None exist** | — | `PaymentPlanInstallment__c` rows are plan templates, not customer obligations; Asset, Contract and Order hold no payments (0 records) |
+
+### 10.3 Reconciliation rules (`AmwajPaymentLedger`, used by the cards *and* by commission)
+- **Confirmed paid** = confirmed booking fee + confirmed deposits − processed refunds (never below zero). Requested but unconfirmed amounts
+  are shown separately as **Awaiting finance**, and only while the EOI or reservation is live.
+- **Confirmed toward the price** = the confirmed deposit on the live or sold reservation only (the fee is additional).
+- **Refunds:** processed refund requests; if none is visible, the amount the org's flow stamps on a Refunded EOI. Never both (same money).
+  Reps can't see refund requests raised by finance (Private, no sharing rules), so the EOI stamp is what makes refunds visible to them.
+- **No double counting:** a confirmed deposit on a cancelled reservation is not counted when a later reservation on the same EOI has its own
+  confirmed deposit (flagged for finance). An expired EOI with a confirmed fee and no processed refund stays counted (flagged).
+- **Not recorded** (shown as such, never as zero): remaining payable, instalment counts (paid, partial, unpaid, overdue, upcoming), next
+  payment, overdue. No reliable due dates exist, so nothing is labelled overdue. A field the user can't read shows *Not available*.
+- **Rule to confirm:** a remaining balance could be shown as "net price − confirmed deposit" only if Amwaj confirms that no instalment is ever
+  collected outside Salesforce. Collections and refunds go through an ERP (`RefundRequest__c.ERPReference__c`), so it is not shown.
+
+### 10.4 My commission per sold unit
+Built on the existing `AmwajCommissionService` and policy (`Amwaj_Commission_Policy__mdt.Default`, 1%, still **proposed, unconfirmed**;
+every figure is labelled an estimate). Per sold unit: unit and project, customer, deal, EOI and reservation, sale date (`ActivationDate__c`),
+sale value (`NetPrice__c`), eligible confirmed collections, rate, estimated commission. Totals and project, customer and text filters above.
+Confirmed money on units **not** sold (reserved, held, released) still earns under the proposed cash-basis rule. It is shown in its own
+section and total, never mixed in. **No forecast** on the remaining balance (instalment receipts aren't recorded). **No payout status**
+(not tracked). Attribution: deal owner (unchanged assumption). Signature eligibility and refund treatment are unchanged.
+
+**Security:** the commission's existing finance read (system mode, limited to deals the user owns) keeps its scope; it now also returns the
+reservation **status** (to classify a unit as sold) and record ids. Sale value, sale date and reservation number are read in **user mode**; a
+reservation the rep can't see shows "Not shared with you". The customer portfolio reads in user mode only.
+
+### 10.5 API (extends the existing read API)
+`GET customers?search=&projectId=` → cards + totals over the complete matching set; `GET customers/{accountId}` → unit detail.
+A fixed set of queries whatever the number of customers (owned-deal aggregate, accounts, deals, EOIs, reservations, refunds).
+The commission response adds `saleStatus`, reservation, sale date and value, `soldUnits`, `soldCommission`, `notSoldCommission`, `rateStatus`.
+New classes: `AmwajPaymentLedger`, `AmwajCustomerPortfolioService` (+ tests). No objects, fields, flows, triggers, metadata records or
+permission changes.
+
+### 10.6 Validation (AmwajReact)
+| Check | Result |
+| --- | --- |
+| Apex | **60/60** pass (deploy `0AfRR00000glXBe0AM`): ledger rules (fee and deposit, pending only while live, carried-over deposit, refunds counted once, partial refund, never negative, missing values, sale status); portfolio end to end through the org's flows as reps (sold + reserved + EOI hold on one customer; rep2 never sees it; 404 on detail); commission per sold unit (1% of $46,000 collected, not of the $400,000 price); sold unit with no eligible collections; API routing and bad ids |
+| Frontend | `tsc` + `vite build` pass; ESLint 0 errors (5 pre-existing warnings); Vitest **20/20** (status wording, unit preview, commission totals and filters, amount format). UI deploy `0AfRR00000glZuz0AE` |
+| **As Sarah Khazaal** (Log in as) | Customers: 3 cards; totals 1 sold, 1 reserved, 3 held, **$116,860** confirmed. *SalesUI TEST Customer 2*: A105 Sold, A106 Reserved (deposit awaiting finance), A107 Held by EOI, A108 refunded, A10 expired; confirmed $116,860 after $2,000 refunded, awaiting $82,125, price $727,800, remaining and instalments *Not recorded*, all equal to a hand calculation. Commission: A105 **$1,108.23** = 1% × $110,823 (fee $6,273 + deposit $104,550) on a $418,200 sale; not sold: A106 $46.44, A108 $13.93; customer and text filters update the totals. An admin-owned customer → "Not available to you" |
+| Admin view | 31 customers, $265,288 confirmed = independent SOQL recomputation |
+| Phone (390 px) | Live deployed app as Sarah in 390 px same-origin frames (the Chrome window couldn't be resized): Customers, customer overview, My commission. No horizontal overflow; the commission table becomes per-unit cards |
+| Unit-tested only | Carried-over deposit and "sold with no eligible collections" (the org's validation rules prevent both in normal processing; they exist only in imported data); the hidden-records note; a user without payment field access |
+
+Test data (sandbox, labelled "SalesUI TEST", owned by Sarah) on *SalesUI TEST Customer 2*: three new deals (renamed by the org's flow)
+plus the existing deal; EOI-00000105 to 108; RES-00000029 (**Active: A105 is now Sold**); RES-00000030 (A106 held until 24 Oct 2026);
+REF-00000003 (processed, $2,000; A108 released). EOI-00000107 holds A107 until 13 Oct 2026. To release: set EOI-00000107 to Expired, and
+cancel RES-00000030 with a cancel reason. A105 stays Sold.
+
+Screenshots: `portfolio-1-customers-totals-sales-user.jpg`, `portfolio-2-customer-cards-sales-user.jpg`,
+`portfolio-3-customer-overview-sales-user.jpg`, `commission-1-per-sold-unit-sales-user.jpg`, `portfolio-commission-phone-390px-sales-user.jpg`.
+
+## 11. Reservations list (Oct 2026)
+**Reservations** (`/reservations`, in the top navigation after EOIs) lists the reservations the user owns or that sit on deals they own.
+`GET reservations` reads them in **user mode** (Reservation__c is Private with no sharing rules, so a rep sees only their own), with
+fields the user can't read left out. It returns the newest 200 and sets `truncated` when there are more.
+Filters: **Live** (Submitted, PendingWithContracts), **Deposit awaiting finance** (live with `DepositVerified__c` false), **Sold** (Active),
+**Cancelled** (Cancelled, Terminated) and **All**, plus a search on customer, unit, project, RES, EOI or deal. Each card shows status,
+deposit state, unit, project and source EOI, net price, deposit and payment plan, and the date that matters at that stage: hold expiry
+(`HoldExpiry__c`), deposit confirmation, sale (`ActivationDate__c`) or end (`CancelledDate__c`). A card opens its EOI, where the
+reservation is created and shown.
+Validation: Apex `AmwajSalesApiTest` (the reservation created through the API is listed with its EOI and deposit; another rep sees none;
+an EOI-only rep sees an empty list), Vitest filters and search. Live as the admin: 16 reservations (11 live, 4 sold, 1 cancelled), equal
+to a direct SOQL count. As Sarah: 2 (RES-00000030 live with the deposit awaiting finance, RES-00000029 sold), as expected.
+
+
+## 12. EOI PDF, cleaner customer overview, demo mode and the commission dashboard (Oct 2026)
+
+### 12.1 EOI PDF ("Generate EOI PDF")
+**What the org has (inspected, nothing created):** PhiDoc Studio (`apxphi`) is installed but has **no templates**, no generation requests
+and no usage; no EOI email template, Visualforce page or flow produces EOI documents. Using PhiDoc would mean creating org-side template
+records, so the document is laid out **in the app** instead. No trigger or flow runs on `ContentVersion` / `ContentDocumentLink`, and no
+flow reads `EOI_Document_Attached__c`: only the app's "Upload signed EOI" sets it.
+
+**Where:** the EOI created confirmation screen, the EOI detail page header, and each unit's EOI block on the customer overview. Works for
+any EOI the user can open; another rep's EOI returns "not found or not shared with you".
+
+**How:** `GET eois/{id}/document-data` (`AmwajEoiDocumentService.documentData`, user mode) reads the **saved** EOI and its linked records
+(customer person account, unit, building, project, EOI owner and the owner's recorded manager). The browser renders two bilingual A4 pages
+(Arabic first, right to left, IBM Plex Sans Arabic bundled with the app, Latin digits for numbers and IDs) and turns them into a PDF
+(html-to-image + jsPDF, 2.5× resolution, ~0.8 MB). The dialog shows the actual pages as the preview, with **Download PDF**
+(`Amwaj-EOI-{number}.pdf`) and **Open PDF**. Generating reads only: no EOI, hold, status, signature or payment change.
+
+**Save to Salesforce** (`POST eois/{id}/generated-document`, `saveGenerated`): offered only when the user may edit the EOI and create
+files (the same rule as filing the signed EOI). Sales reps lack Edit on `EOI__c`, so they only see Download; permissions were **not**
+broadened. It inserts one `ContentVersion` titled "Amwaj-EOI-… (generated, unsigned)", linked to the EOI, and **never** updates the EOI.
+The EOI page lists such files under "Generated PDFs (unsigned, not signature evidence)"; they don't count as the signed EOI.
+
+**Content and sources**
+| Document field | Source |
+| --- | --- |
+| EOI number, created, status, hold expiry | `EOI__c.Name`, `CreatedDate`, `Status__c`, `ExpiryDate__c` |
+| Full name (Arabic) / name (English) | `Account.Full_Name__pc` / `Account.Name` |
+| National ID + issue date, residence ID + issue date | `NationalID__pc`, `National_ID_Date__pc`, `Residence_ID__pc`, `Residence_ID_Date__pc` |
+| Governorate, district, locality, alley, house | `BillingCity` (holds the governorate in this org), `District__pc`, `Neighborhood__pc`, `Alley__pc`, `House_Number__pc` |
+| Phone 1, phone 2, email | `PersonMobilePhone`, `Phone` ("Secondary Mobile"), `PersonEmail` |
+| Project, building | `Project__r.Name` + `Name_Ar__c`; `Inventory__r.Building__r.Name` + `Name_Ar__c` |
+| Unit, floor, type, area | `Inventory__r.Name`/`UnitCode__c`, `FloorNumber__c`, `Unit_Type__c` (+ bedrooms), `BuiltUpArea_SQM__c` |
+| List price | `Inventory__r.Unit_Price__c` |
+| Discount | `Discount__c` with `Approval_Status__c`: deducted **only when Approved**. A requested, pending or rejected discount is shown with its status and "not deducted, not a commercial commitment" (note: the org's `EOI__c.Unit_Price__c` formula deducts the discount even before approval, so it is not used as the net price). When `Skip_Discount_Approval__c` is set, approval sits on the reservation |
+| Net price | List price less an approved discount |
+| Booking fee (+ confirmed or not) | `Reservation_Fees__c` (+ `PaymentVerifiedByFinance__c`), stated as paid in addition to the unit price |
+| Payment method, plan | `Payment_Method__c`, `Preferred_Payment_Plan__r.Name` |
+| Signature blocks | Buyer (name pre-filled), sales representative (`Owner.Name`), sales manager (`Owner.Manager.Name`; blank if none is recorded); signature and date left empty |
+
+**Not included (missing or unapproved), so the PDF is a labelled draft:** declaration / acknowledgement, refund restrictions, contractual
+terms, bank account instructions, project logos and third-party logos. None of these is recorded in Salesforce (no fields on `Project__c`,
+no custom labels, no templates). The sample paper form (Iraq Gate Lake) carries a Dorchester logo, the Baghdad Investment Commission logo,
+two bank accounts and a declaration about the first payment and forfeiting the booking fee; none of it is copied. Every page says
+"Draft for review — approved declaration and terms not attached" and has a faint DRAFT watermark; page 2 has a dashed box asking for the
+approved wording before signing. **To finish:** supply the approved declaration and refund wording per project, verified bank details per
+project, and project logos, and say where they should live (e.g. fields on `Project__c`), then they can be printed.
+
+### 12.2 Customer overview cleanup
+The blue "Paid counts only money…" panel is gone from Customers and the customer overview, and long section descriptions were shortened.
+The meaning of every figure is unchanged: live mode still shows *Not recorded* for remaining payable, overdue and instalments, now with a
+small ⓘ that explains why on click or tap. "Confirmed paid" has the same ⓘ for what it includes.
+
+### 12.3 Demo mode
+A **Live / Demo** switch in the header (remembered per browser; `?demo=1` / `?demo=0` in the URL also sets it for that page). When on, a
+small orange "Demo" badge marks the page headings, and Customers, the customer overview, My commission and the Overview commission card
+use a **frontend sample dataset** (`src/lib/demo.ts`). Nothing is written to Salesforce; live mode never mixes in sample values.
+Other pages (leads, units, EOIs, reservations) stay live.
+
+- Six sample customers, every name ending "(Sample)", every record numbered `DEMO-…`, on three project names (The Gardenes, Karblaa Gate,
+  The Lake): 4 sold, 2 reserved (one with the deposit awaiting finance), 1 held by EOI, 1 released with a refunded booking fee; partial,
+  overdue and fully paid schedules; one $5,000 processed refund of a duplicate payment.
+- Deterministic: amounts are fixed; due dates are relative to today, so statuses (overdue, upcoming) look current but never change amounts.
+- Schedules: 20% down payment + 8 quarterly instalments of 10% (or a single cash payment); money received is applied in order. Booking
+  fee = 1.5% of the price, on top of it.
+- Cards, unit details, schedules and commission come from the same figures and reconcile (unit-tested).
+- A sample unit's "Generate EOI PDF" produces a document marked "Demo / Sample" on every page (`…-DEMO.pdf`), with no Save action.
+
+### 12.4 My commission
+Clean dashboard: **Commission on collections**, **Potential remaining commission**, **Total potential commission**, **Units sold**; project,
+customer and text filters (totals follow them); a per-unit table (cards on phones) with unit and project, customer, sale value, eligible
+collections (with a collected-% bar), rate, commission on collections and potential remaining; reserved, held and (live) released units
+in their own section that is **not** in the totals. No yellow banner, no "calculated in Salesforce", no "paid to you".
+
+| | Live | Demo |
+| --- | --- | --- |
+| Calculation | Existing `AmwajCommissionService`, unchanged (proposed 1% of confirmed collections incl. booking fee, signed EOI, less refunds) | `src/lib/commissionView.ts` under the demo assumptions below |
+| Remaining / total potential | *Not recorded* (instalment receipts aren't in Salesforce) | Rate × unpaid property-price balance |
+| Header label | "Estimate · 1% proposed rate" | "Demo" |
+| Reserved / held units | Commission on confirmed collections (live rule) | "Potential if completed" = rate × sale value |
+
+**Demo commission assumptions (not Amwaj policy):** rate 1%; eligible base = property-price payments collected on completed (sold) units;
+taxes and separate booking/admin fees excluded; processed refunds deducted from eligible collections; one salesperson per sale, no splits;
+potential remaining = rate × unpaid property-price balance. Example: $200,000 sale, $50,000 collected → $500 on collections, $1,500
+remaining, $2,000 total (sample unit DEMO-G-1204).
+
+### 12.5 Where each value comes from
+| Kind | Values |
+| --- | --- |
+| **Directly from Salesforce** | EOI, reservation, refund, deal and customer records and their fields (numbers, statuses, dates, prices, fees, deposits, discount and approval status, payment method and plan, IDs, address, phones, email); unit, building and project details; owner and manager names; the commission rate (`Amwaj_Commission_Policy__mdt`) |
+| **Calculated from Salesforce data** | Live: confirmed paid, awaiting finance, refunds counted once, sold/reserved/held counts (`AmwajPaymentLedger`); live commission and per-line eligible basis (`AmwajCommissionService`); PDF net price (list − approved discount); reservations filters |
+| **Simulated / assumed (demo mode only)** | Sample customers, units, deals, EOI/reservation numbers, payment schedules, receipts, due dates, overdue amounts, the $5,000 refund, remaining balances, next payments; all demo commission figures and the assumptions in 12.4; the sample EOI PDF content (sample ID, address, "Sample Sales Manager") |
+
+### 12.6 Validation (AmwajReact)
+| Check | Result |
+| --- | --- |
+| Apex | `AmwajEoiDocumentServiceTest`: data comes from the saved EOI and customer; another rep gets 404; reps can't save (403); only real PDFs; saving leaves status, expiry, signature flag, payment and approval unchanged and creates no EOI; requested discount keeps its approval status. Plus `AmwajSalesApiTest` (routes). All eight project test classes: **69/69** pass |
+| Frontend | `tsc`, ESLint 0 errors (5 pre-existing warnings), Vitest **42/42** (PDF pricing rules incl. pending/rejected/reservation-approved discounts, file name; demo determinism, sample labelling, schedule statuses, card/unit/schedule reconciliation, search incl. local phone format, project filter; brief's commission example; booking fee excluded; refund deducted; pipeline separate; live view keeps Salesforce figures and shows no remaining; released units only while they carry commission), `vite build` |
+| **As Sarah Khazaal** (Log in as) | Created **EOI-00000109** (A119, labelled TEST deal) in the app; "Generate EOI PDF" on the confirmation screen; PDF content checked field by field (USD 144,000 list and net, no discount, fee USD 2,160 not yet confirmed, hold 13/10/2026, Sarah as rep, manager blank because none is recorded), Arabic shaping and RTL correct, A4, 2 pages; no Save button (no EOI edit access); an admin-owned EOI returns "not found or not shared". EOI-00000105 and -109 unchanged afterwards (same `SystemModstamp`), EOI count unchanged (41). Demo: 6 sample customers, totals, cards, overview, schedule, sample PDF, commission totals and project filter checked against hand calculation; switching back to live resets filters and shows A105 $1,108.23 as before |
+| As the admin | Existing EOI-00000105 PDF downloaded and inspected; **Save to Salesforce** on EOI-00000109 linked "Amwaj-EOI-00000109 (generated, unsigned)"; EOI unchanged; listed under "Generated PDFs (unsigned)", signed step still open |
+| Phone (390 px frames) | Customers (demo), customer overview (demo), EOI page and PDF dialog, Reservations, My commission (demo and live): no horizontal overflow |
+| Not verified | Discount approved / pending / rejected PDFs live (unit-tested only: a discount request starts the org's approval process, which could notify real approvers); a project with Arabic building names (none recorded); printing on paper; the PDF in Safari / iOS |
+
+Sample PDF: `docs/samples/Amwaj-EOI-00000109-TEST.pdf` (TEST data). Screenshots: `eoi-pdf-1…4`, `cleanup-1…2`, `demo-1…5`,
+`commission-demo-1…2`, `commission-live-1…2`, `phone-390px-demo-and-live-sales-user.jpg`.
+
+Test data added: deal "SalesUI TEST Customer 2-The Gardenes" (`006RR00000YbQxdYAF`, created as "SalesUI TEST PDF deal", owned by Sarah) and
+**EOI-00000109** holding A119 until 13 Oct 2026, with one generated unsigned PDF file. To release: let the hold expire (the org's
+scheduled flow) or set the EOI to Expired; delete the file if not wanted.
+
+### 12.7 Client demo walkthrough (about 6 minutes)
+1. **EOIs & holds** → open an EOI → **Generate EOI PDF**: bilingual A4 preview → Download. Point out it is built from the saved record and
+   marked as a draft until Amwaj's approved terms are added.
+2. **New EOI** from a deal → after "EOI created", **Generate EOI PDF** straight from the confirmation.
+3. Switch the header to **Demo**. **Customers**: totals strip, cards with paid / remaining / instalments / overdue.
+4. Open **Layla Kareem (Sample)**: payment summary, then unit DEMO-G-1204 with its schedule (paid, part paid, overdue, upcoming).
+5. **My commission**: $500 on the $50,000 collected for DEMO-G-1204, $1,500 remaining, $2,000 total; filter by The Lake; reserved and held
+   units shown separately as potential.
+6. Switch back to **Live** to show the real figures and that nothing sample remains.

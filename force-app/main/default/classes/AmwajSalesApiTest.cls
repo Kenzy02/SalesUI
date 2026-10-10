@@ -198,6 +198,22 @@ private class AmwajSalesApiTest {
             Map<String, Object> commission = call('GET', 'commission', null);
             Assert.areEqual(200, commission.get('_status'));
             Assert.areEqual(0, dec(commission.get('commission')), 'Not signed, nothing confirmed yet');
+
+            Map<String, Object> customers = call('GET', 'customers', null);
+            Assert.areEqual(200, customers.get('_status'), '' + customers.get('error'));
+            Assert.areEqual(1, items(customers, 'customers').size());
+            Map<String, Object> card = (Map<String, Object>) items(customers, 'customers')[0];
+            Assert.areEqual(1, ((Map<String, Object>) card.get('counts')).get('eoiHold'));
+            Map<String, Object> pay = (Map<String, Object>) card.get('payments');
+            Assert.areEqual(0, dec(pay.get('confirmedPaid')), 'Fee requested, not confirmed by finance');
+            Assert.areEqual(AmwajSalesTestData.LIST_PRICE * 0.015, dec(pay.get('pendingConfirmation')));
+            Assert.areEqual(200, call('GET', 'customers/' + deal.AccountId, null).get('_status'));
+            Assert.areEqual(400, call('GET', 'customers?projectId=not-an-id', null).get('_status'));
+            Assert.areEqual(400, call('GET', 'customers/not-an-id', null).get('_status'));
+
+            Map<String, Object> reservations = call('GET', 'reservations', null);
+            Assert.areEqual(200, reservations.get('_status'), '' + reservations.get('error'));
+            Assert.isTrue(items(reservations, 'reservations').isEmpty(), 'EOI only, no reservation yet');
         }
         Test.stopTest();
     }
@@ -257,6 +273,18 @@ private class AmwajSalesApiTest {
         Assert.areEqual(200, res.get('_status'), '' + res.get('error'));
         Assert.areEqual(25000, dec(res.get('deposit')), 'Cash buyers: the deposit entered by the sales user');
         Assert.areEqual('RESERVED', call('GET', 'eois/' + eoiId, null).get('nextStep'));
+
+        List<Object> reservations = items(call('GET', 'reservations', null), 'reservations');
+        Assert.areEqual(1, reservations.size());
+        Map<String, Object> row = (Map<String, Object>) reservations[0];
+        Assert.areEqual(res.get('name'), row.get('name'));
+        Assert.areEqual(eoiId, row.get('eoiId'));
+        Assert.areEqual(25000, dec(row.get('deposit')));
+        Assert.isNotNull(row.get('customerName'));
+        Assert.isFalse(row.containsKey('dealAccountName'));
+        System.runAs(AmwajSalesTestData.rep('rep2')) {
+            Assert.isTrue(items(call('GET', 'reservations', null), 'reservations').isEmpty(), 'Not shared with another rep');
+        }
         Test.stopTest();
     }
 

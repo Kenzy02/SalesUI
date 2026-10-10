@@ -12,7 +12,9 @@ import type {
   ConversionResult,
   ConversionReview,
   ConvertInput,
+  CustomerList,
   CustomerMatch,
+  CustomerPortfolio,
   DealDetail,
   DealRow,
   EoiCreated,
@@ -26,10 +28,12 @@ import type {
   Overview,
   ReservationCreated,
   ReservationInput,
+  ReservationListRow,
   UnitDetail,
   UnitFacets,
   UnitPage,
 } from './salesTypes';
+import type { EoiDocumentData } from '@/lib/eoiDocument';
 
 const BASE = '/services/apexrest/amwaj/sales/v1';
 
@@ -136,6 +140,10 @@ export const salesApi = {
   ) => request<{ activities: Activity[] }>('POST', `/${parent}/${enc(id)}/activities`, activity),
   completeActivity: (taskId: string) => request<{ id: string }>('POST', `/activities/${enc(taskId)}/complete`),
 
+  /** One entry per customer on the user's deals, with units and confirmed payments (whole authorised set). */
+  customers: (search?: string, projectId?: string) => request<CustomerList>('GET', `/customers${query({ search, projectId })}`),
+  customer: (accountId: string) => request<CustomerPortfolio>('GET', `/customers/${enc(accountId)}`),
+
   deals: (search?: string, projectId?: string) => request<{ deals: DealRow[] }>('GET', `/deals${query({ search, projectId })}`),
   deal: (id: string) => request<DealDetail>('GET', `/deals/${enc(id)}`),
 
@@ -145,9 +153,15 @@ export const salesApi = {
 
   eois: () => request<{ eois: EoiRow[] }>('GET', '/eois'),
   eoi: (id: string) => request<EoiRow>('GET', `/eois/${enc(id)}`),
+  /** The saved EOI and its linked records, for the generated EOI document. */
+  eoiDocument: (id: string) => request<EoiDocumentData>('GET', `/eois/${enc(id)}/document-data`),
+  /** Adds the generated PDF to the EOI's files (unsigned copy); the EOI itself is not changed. */
+  saveGeneratedEoi: (id: string, fileName: string, base64: string) =>
+    request<{ versionId: string; title: string }>('POST', `/eois/${enc(id)}/generated-document`, { fileName, base64 }),
   createEoi: (offer: OfferInput) => request<EoiCreated>('POST', '/eois', offer),
   attachSignedEoi: (id: string, fileName: string, base64: string) =>
     request<EoiRow>('POST', `/eois/${enc(id)}/document`, { fileName, base64 }),
+  reservations: () => request<{ reservations: ReservationListRow[]; truncated: boolean }>('GET', '/reservations'),
   createReservation: (input: ReservationInput) => request<ReservationCreated>('POST', '/reservations', input),
 
   commission: () => request<Commission>('GET', '/commission'),

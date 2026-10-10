@@ -5,11 +5,11 @@
  * CSRF token). Identity always comes from the session (UserInfo); the API
  * never accepts an owner or user id from the client.
  *
- *   GET   me | overview | leads | leads/{id} | leads/{id}/conversion | deals | deals/{id}
- *         units/facets | units | units/{id} | eois | eois/{id} | commission | files/{versionId}
+ *   GET   me | overview | leads | leads/{id} | leads/{id}/conversion | customers | customers/{accountId} | deals | deals/{id}
+ *         units/facets | units | units/{id} | eois | eois/{id} | eois/{id}/document-data | reservations | commission | files/{versionId}
  *   PATCH leads/{id}
  *   POST  leads/{id}/activities | leads/{id}/matches | leads/{id}/convert | deals/{id}/activities
- *         activities/{id}/complete | eois | eois/{id}/document | reservations
+ *         activities/{id}/complete | eois | eois/{id}/document | eois/{id}/generated-document | reservations
  */
 @RestResource(urlMapping='/amwaj/sales/v1/*')
 global with sharing class AmwajSalesApi {
@@ -85,6 +85,11 @@ global with sharing class AmwajSalesApi {
                         ? AmwajSalesReadService.leads(req.params.get('status'), req.params.get('search'), req.params.get('projectId'))
                         : AmwajSalesReadService.leadDetail(idAt(s, 1));
                 }
+                when 'customers' {
+                    return n == 1
+                        ? AmwajCustomerPortfolioService.customers(req.params.get('search'), req.params.get('projectId'))
+                        : AmwajCustomerPortfolioService.customer(idAt(s, 1));
+                }
                 when 'deals' {
                     return n == 1 ? AmwajSalesReadService.deals(req.params.get('search'), req.params.get('projectId')) : AmwajSalesReadService.dealDetail(idAt(s, 1));
                 }
@@ -95,9 +100,17 @@ global with sharing class AmwajSalesApi {
                     return s[1] == 'facets' ? AmwajSalesReadService.unitFacets() : AmwajSalesReadService.unitDetail(idAt(s, 1));
                 }
                 when 'eois' {
+                    if (n == 3 && s[2] == 'document-data') {
+                        return AmwajEoiDocumentService.documentData(idAt(s, 1));
+                    }
                     return n == 1
                         ? (Object) new Map<String, Object>{ 'eois' => AmwajSalesReadService.eoiRows(null, null) }
                         : AmwajSalesReadService.eoiDetail(idAt(s, 1));
+                }
+                when 'reservations' {
+                    if (n == 1) {
+                        return AmwajSalesReadService.reservations();
+                    }
                 }
                 when 'commission' {
                     return AmwajCommissionService.forCurrentUser();
@@ -136,6 +149,10 @@ global with sharing class AmwajSalesApi {
             if (head == 'eois' && n == 3 && s[2] == 'document') {
                 Map<String, Object> body = (Map<String, Object>) JSON.deserializeUntyped(bodyOf(req));
                 return AmwajOfferService.attachSignedEoi(idAt(s, 1), (String) body.get('fileName'), (String) body.get('base64'));
+            }
+            if (head == 'eois' && n == 3 && s[2] == 'generated-document') {
+                Map<String, Object> body = (Map<String, Object>) JSON.deserializeUntyped(bodyOf(req));
+                return AmwajEoiDocumentService.saveGenerated(idAt(s, 1), (String) body.get('fileName'), (String) body.get('base64'));
             }
             if (head == 'reservations' && n == 1) {
                 return AmwajOfferService.createReservation(

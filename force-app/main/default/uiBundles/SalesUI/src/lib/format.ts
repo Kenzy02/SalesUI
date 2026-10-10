@@ -18,6 +18,12 @@ export function money(value: number | null | undefined, currency: string, fracti
   return f.format(value);
 }
 
+/** Whole amounts without decimals, amounts with cents to the cent (e.g. $27,205.44). */
+export function amount(value: number | null | undefined, currency: string): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—';
+  return money(value, currency, Number.isInteger(Math.round(value * 100) / 100) ? 0 : 2);
+}
+
 const dateFormat = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 let dateTimeFormat = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 

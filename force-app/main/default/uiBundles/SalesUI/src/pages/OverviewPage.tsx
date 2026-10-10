@@ -3,10 +3,12 @@ import { Link } from 'react-router';
 import { ArrowRight, CalendarClock, FileSignature, Hourglass, Users, Wallet } from 'lucide-react';
 import { salesApi } from '@/api/salesApi';
 import type { Hold } from '@/api/salesTypes';
+import { useDemoMode } from '@/components/app/DemoContext';
 import { useMe } from '@/components/app/MeContext';
 import { EmptyState, ErrorState, LoadingBlock, PageHeader, Section, StatCard, StatusPill } from '@/components/app/Primitives';
 import { Button } from '@/components/ui/button';
 import { useApi } from '@/hooks/useApi';
+import { commissionViewTotals, demoCommissionView } from '@/lib/commissionView';
 import { date, daysUntil, money, plural, relativeDays } from '@/lib/format';
 import { EOI_STEP, LEAD_STATUS } from '@/lib/salesLabels';
 
@@ -17,6 +19,8 @@ function greeting(): string {
 
 export default function OverviewPage() {
   const me = useMe();
+  const { demo } = useDemoMode();
+  const demoCommission = demo ? commissionViewTotals(demoCommissionView(me.today, me.currencyCode).lines) : null;
   const { data, loading, error, errorInfo, reload } = useApi(() => salesApi.overview(), []);
   const errors = data?.sectionErrors ?? {};
   const holds = data?.holds ?? [];
@@ -76,10 +80,18 @@ export default function OverviewPage() {
               to="/eois"
             />
             <StatCard
-              label="Commission estimate"
-              value={errors.commission || !data.commission ? '—' : money(data.commission.commission, data.commission.currencyCode, 2)}
+              label={demoCommission ? 'Commission on collections' : 'Commission estimate'}
+              value={
+                demoCommission
+                  ? money(demoCommission.onCollections, me.currencyCode, 2)
+                  : errors.commission || !data.commission
+                    ? '—'
+                    : money(data.commission.commission, data.commission.currencyCode, 2)
+              }
               hint={
-                errors.commission
+                demoCommission
+                  ? `Demo data · ${money(demoCommission.totalPotential, me.currencyCode)} total potential`
+                  : errors.commission
                   ? 'Unavailable'
                   : data.commission?.ratePct != null
                     ? `Proposed ${data.commission.ratePct}% rule, pending confirmation`

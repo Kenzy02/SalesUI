@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import type { Tone } from '@/lib/salesLabels';
+import { InfoTip } from './InfoTip';
 
 const TONES: Record<Tone, string> = {
   neutral: 'bg-stone-100 text-stone-700 ring-stone-200',
@@ -36,7 +37,7 @@ export function PageHeader({
   actions,
 }: {
   eyebrow?: string;
-  title: string;
+  title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
 }) {
@@ -215,7 +216,13 @@ export function LoadingBlock({ rows = 3, label = 'Loading' }: { rows?: number; l
   );
 }
 
-export function DetailList({ items, columns = 2 }: { items: { label: string; value: ReactNode }[]; columns?: 1 | 2 | 3 }) {
+export function DetailList({
+  items,
+  columns = 2,
+}: {
+  items: { label: string; value: ReactNode; tip?: string }[];
+  columns?: 1 | 2 | 3;
+}) {
   return (
     <dl
       className={cn(
@@ -225,7 +232,10 @@ export function DetailList({ items, columns = 2 }: { items: { label: string; val
     >
       {items.map(item => (
         <div key={item.label} className="min-w-0">
-          <dt className="text-xs text-muted-foreground">{item.label}</dt>
+          <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+            {item.label}
+            {item.tip && <InfoTip label={`About ${item.label}`}>{item.tip}</InfoTip>}
+          </dt>
           <dd className="mt-0.5 break-words font-medium text-foreground">{item.value ?? '—'}</dd>
         </div>
       ))}

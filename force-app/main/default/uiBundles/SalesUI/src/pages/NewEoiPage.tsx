@@ -4,6 +4,7 @@ import { CheckCircle2, ExternalLink, Handshake, Hourglass, Search, ShieldCheck, 
 import { ApiError, salesApi } from '@/api/salesApi';
 import type { CustomerDetails, CustomerInput, DealDetail, DealRow, EoiCreated, UnitDetail } from '@/api/salesTypes';
 import { BookingSteps } from '@/components/app/BookingSteps';
+import { GenerateEoiPdfButton } from '@/components/app/GenerateEoiPdf';
 import { useMe } from '@/components/app/MeContext';
 import { FormField, NativeSelect, TextArea, TextInput } from '@/components/app/FormControls';
 import { PaymentPlanList } from '@/components/app/PaymentPlans';
@@ -678,13 +679,14 @@ function Created({ result, withConversion }: { result: EoiCreated; withConversio
               <li>The signed EOI is filed on the EOI in Salesforce, and finance confirms the payment.</li>
               <li>Once the EOI is paid, reserve the unit from the EOI page.</li>
             </ol>
-            <p className="mt-3 text-xs text-muted-foreground">No document or email was sent by this app.</p>
+            <p className="mt-3 text-xs text-muted-foreground">Nothing was sent to the customer. Generate the EOI PDF below to print or share it.</p>
           </div>
         )}
         <div className="mt-6 flex flex-col gap-2 sm:flex-row">
           <Button asChild size="lg" className="flex-1">
             <Link to={`/eois/${result.eoiId}`}>Open the EOI</Link>
           </Button>
+          <GenerateEoiPdfButton eoiId={result.eoiId} className="flex-1" />
           {result.recordUrl && (
             <Button asChild size="lg" variant="outline" className={cn('flex-1')}>
               <a href={result.recordUrl} target="_blank" rel="noreferrer">
