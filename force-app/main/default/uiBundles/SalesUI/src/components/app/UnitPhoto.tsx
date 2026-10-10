@@ -3,22 +3,29 @@ import { Building2, ImageOff } from 'lucide-react';
 import { fileObjectUrl } from '@/api/salesApi';
 import type { FileRef } from '@/api/salesTypes';
 import { cn } from '@/lib/utils';
+import samplePhoto from '@/assets/demo/unit-photo.jpg';
+import sampleFloorPlan from '@/assets/demo/unit-floor-plan.jpg';
+import { useDemoMode } from './DemoContext';
 
 /**
  * A unit image from Salesforce Files, loaded with the user's session. When the
- * unit has no photo in Salesforce, an honest placeholder says so.
+ * unit has no photo in Salesforce, an honest placeholder says so; in demo mode
+ * a bundled sample picture stands in instead (never saved to Salesforce).
  */
 export function UnitPhoto({
   file,
   alt,
   className,
   showMissingLabel = true,
+  sample = 'photo',
 }: {
   file?: FileRef | null;
   alt: string;
   className?: string;
   showMissingLabel?: boolean;
+  sample?: 'photo' | 'floorplan';
 }) {
+  const { demo } = useDemoMode();
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -38,6 +45,15 @@ export function UnitPhoto({
 
   if (file && src) {
     return <img src={src} alt={alt} className={cn('h-full w-full object-cover', className)} />;
+  }
+  if (demo && (!file || failed)) {
+    return (
+      <img
+        src={sample === 'floorplan' ? sampleFloorPlan : samplePhoto}
+        alt={alt}
+        className={cn('h-full w-full object-cover', className)}
+      />
+    );
   }
   return (
     <div

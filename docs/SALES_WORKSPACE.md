@@ -367,10 +367,13 @@ The meaning of every figure is unchanged: live mode still shows *Not recorded* f
 small ⓘ that explains why on click or tap. "Confirmed paid" has the same ⓘ for what it includes.
 
 ### 12.3 Demo mode
-A **Live / Demo** switch in the header (remembered per browser; `?demo=1` / `?demo=0` in the URL also sets it for that page). When on, a
-small orange "Demo" badge marks the page headings, and Customers, the customer overview, My commission and the Overview commission card
-use a **frontend sample dataset** (`src/lib/demo.ts`). Nothing is written to Salesforce; live mode never mixes in sample values.
-Other pages (leads, units, EOIs, reservations) stay live.
+A deliberately inconspicuous switch in the header: the small grey dot left of the user's name (no label or tooltip, so it does not
+stand out in a client presentation; screen readers announce it as "Demo data"; slightly blue when on). It is remembered per browser;
+`?demo=1` / `?demo=0` in the URL also sets it for that page. Page headings carry no demo badge. When on, Customers, the customer overview,
+My commission and the Overview commission card use a **frontend sample dataset** (`src/lib/demo.ts`). Nothing is written to Salesforce;
+live mode never mixes in sample values. Other pages (leads, units, EOIs, reservations) stay live, except that a unit with no photo or
+floor plan in Salesforce shows a bundled sample picture (`src/assets/demo/unit-photo.jpg`, `unit-floor-plan.jpg`) instead of the
+"No photos in Salesforce yet" placeholder; units with real Salesforce photos show their own. Demo EOI PDFs stay marked "Demo / Sample".
 
 - Six sample customers, every name ending "(Sample)", every record numbered `DEMO-…`, on three project names (The Gardenes, Karblaa Gate,
   The Lake): 4 sold, 2 reserved (one with the deposit awaiting finance), 1 held by EOI, 1 released with a refunded booking fee; partial,

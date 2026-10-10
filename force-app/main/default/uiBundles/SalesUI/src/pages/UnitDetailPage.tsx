@@ -4,6 +4,7 @@ import { ArrowRight, Hourglass, Info } from 'lucide-react';
 import { salesApi } from '@/api/salesApi';
 import type { FileRef, UnitDetail } from '@/api/salesTypes';
 import { BookingSteps } from '@/components/app/BookingSteps';
+import { useDemoMode } from '@/components/app/DemoContext';
 import { CustomerContextBanner, type CustomerContextData, useCustomerContext } from '@/components/app/CustomerContext';
 import { useMe } from '@/components/app/MeContext';
 import { PaymentPlanList } from '@/components/app/PaymentPlans';
@@ -257,19 +258,28 @@ function ContinueButton({ to, label, ready, block }: { to: string; label: string
 function Gallery({ images, floorPlans, unitName }: { images: FileRef[]; floorPlans: FileRef[]; unitName: string }) {
   const [tab, setTab] = useState<'photos' | 'floorplans'>(images.length || !floorPlans.length ? 'photos' : 'floorplans');
   const [index, setIndex] = useState(0);
+  const { demo } = useDemoMode();
   const list = tab === 'photos' ? images : floorPlans;
+  // Demo mode shows one sample picture in place of an empty tab.
+  const count = (l: FileRef[]) => (demo && !l.length ? 1 : l.length);
   const current = list[Math.min(index, Math.max(0, list.length - 1))];
 
   return (
     <Section className="overflow-hidden">
       <div className="-mx-5 -mt-4">
-        <div className="relative aspect-[16/9] bg-muted">
+        <div className="relative aspect-[16/9] overflow-hidden bg-muted">
           {list.length ? (
-            <UnitPhoto file={current} alt={`${tab === 'photos' ? 'Photo' : 'Floor plan'} of unit ${unitName}${current?.title ? `: ${current.title}` : ''}`} className={tab === 'floorplans' ? 'object-contain bg-white' : undefined} />
+            <UnitPhoto file={current} alt={`${tab === 'photos' ? 'Photo' : 'Floor plan'} of unit ${unitName}${current?.title ? `: ${current.title}` : ''}`} className={tab === 'floorplans' ? 'object-contain bg-white' : undefined} sample={tab === 'floorplans' ? 'floorplan' : 'photo'} />
           ) : (
-            <UnitPhoto file={null} alt="" showMissingLabel={false} />
+            <UnitPhoto
+              file={null}
+              alt={demo ? `${tab === 'photos' ? 'Photo' : 'Floor plan'} of unit ${unitName}` : ''}
+              showMissingLabel={false}
+              sample={tab === 'floorplans' ? 'floorplan' : 'photo'}
+              className={tab === 'floorplans' ? 'object-contain bg-white' : undefined}
+            />
           )}
-          {!list.length && (
+          {!list.length && !demo && (
             <div className="absolute inset-0 flex items-end justify-center pb-6">
               <span className="rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-brand-navy shadow-sm">
                 {tab === 'photos' ? 'No photos have been added in Salesforce yet' : 'No floor plan has been added in Salesforce yet'}
@@ -295,7 +305,7 @@ function Gallery({ images, floorPlans, unitName }: { images: FileRef[]; floorPla
                 tab === t ? 'bg-brand-navy text-white' : 'text-muted-foreground hover:text-brand-navy'
               )}
             >
-              {t === 'photos' ? `Photos (${images.length})` : `Floor plans (${floorPlans.length})`}
+              {t === 'photos' ? `Photos (${count(images)})` : `Floor plans (${count(floorPlans)})`}
             </button>
           ))}
         </div>

@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { salesApi } from '@/api/salesApi';
 import { useDemoMode } from '@/components/app/DemoContext';
-import { DemoBadge } from '@/components/app/DemoToggle';
 import { NativeSelect, TextInput } from '@/components/app/FormControls';
 import { InfoTip } from '@/components/app/InfoTip';
 import { useMe } from '@/components/app/MeContext';
@@ -109,9 +108,7 @@ export default function CommissionPage() {
         title={
           <span className="inline-flex flex-wrap items-center gap-2">
             My commission
-            {demo ? (
-              <DemoBadge />
-            ) : view?.ratePct != null ? (
+            {!demo && view?.ratePct != null ? (
               <StatusPill tone="neutral" className="text-xs">
                 Estimate · {view.ratePct}% proposed rate
               </StatusPill>

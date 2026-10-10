@@ -8,7 +8,6 @@ import type {
   UnitMoney,
 } from '@/api/salesTypes';
 import { useDemoMode } from '@/components/app/DemoContext';
-import { DemoBadge } from '@/components/app/DemoToggle';
 import { GenerateEoiPdfButton } from '@/components/app/GenerateEoiPdf';
 import { InfoTip } from '@/components/app/InfoTip';
 import { useMe } from '@/components/app/MeContext';
@@ -94,7 +93,7 @@ export default function CustomerPortfolioPage() {
             eyebrow="Customer overview"
             title={
               <span className="inline-flex flex-wrap items-center gap-2">
-                {c.name ?? 'Customer'} {sample && <DemoBadge />}
+                {c.name ?? 'Customer'}
               </span>
             }
             description={

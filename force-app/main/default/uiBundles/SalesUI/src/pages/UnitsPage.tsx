@@ -378,7 +378,7 @@ function UnitCard({ unit, currency, to }: { unit: UnitRow; currency: string; to:
       to={to}
       className="group flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgba(20,30,60,0.04)] transition hover:-translate-y-0.5 hover:border-brand-steel/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
     >
-      <div className="relative aspect-[16/9]">
+      <div className="relative aspect-[16/9] overflow-hidden">
         <UnitPhoto file={unit.coverImage} alt={`Unit ${unit.name}`} />
         <StatusPill tone={s.tone} className="absolute right-3 top-3 shadow-sm">
           {s.label}

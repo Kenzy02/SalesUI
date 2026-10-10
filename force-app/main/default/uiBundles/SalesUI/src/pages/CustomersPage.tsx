@@ -21,7 +21,6 @@ import {
   Unavailable,
 } from '@/components/app/Portfolio';
 import { useDemoMode } from '@/components/app/DemoContext';
-import { DemoBadge } from '@/components/app/DemoToggle';
 import { InfoTip } from '@/components/app/InfoTip';
 import { DEMO_PROJECTS, demoCustomers } from '@/lib/demo';
 import { NativeSelect, TextInput } from '@/components/app/FormControls';
@@ -88,7 +87,7 @@ export default function CustomersPage() {
         eyebrow="My customers"
         title={
           <span className="inline-flex items-center gap-2">
-            Customers {demo && <DemoBadge />}
+            Customers
           </span>
         }
         description="One card per customer, with their units and payments."
